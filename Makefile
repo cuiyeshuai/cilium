@@ -522,7 +522,7 @@ kind-install-cilium: kind-ready ## Install a local Cilium version into the clust
 	# https://github.com/cilium/cilium-cli/issues/1070
 	cilium install \
 		--chart-directory=$(ROOT_DIR)/install/kubernetes/cilium \
-		--helm-values=$(ROOT_DIR)/contrib/testing/kind-values.yaml \
+		--helm-values=$(ROOT_DIR)/contrib/testing/kind-crab-values.yaml \
 		--version= \
 		>/dev/null 2>&1 &
 

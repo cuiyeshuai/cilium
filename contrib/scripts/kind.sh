@@ -5,7 +5,7 @@
 set -euo pipefail
 
 default_controlplanes=1
-default_workers=1
+default_workers=3
 default_cluster_name=""
 default_image=""
 default_kubeproxy_mode="iptables"
@@ -169,7 +169,7 @@ fi
 # Replace "forward . /etc/resolv.conf" in the coredns cm with "forward . 8.8.8.8".
 # This is required because in case of BPF Host Routing we bypass iptables thus
 # breaking DNS. See https://github.com/cilium/cilium/issues/23330
-NewCoreFile=$(kubectl get cm -n kube-system coredns -o jsonpath='{.data.Corefile}' | sed 's,forward . /etc/resolv.conf,forward . 8.8.8.8,' | sed -z 's/\n/\\n/g')
+NewCoreFile=$(kubectl get cm -n kube-system coredns -o jsonpath='{.data.Corefile}' | gsed 's,forward . /etc/resolv.conf,forward . 8.8.8.8,' | gsed -z 's/\n/\\n/g')
 kubectl patch configmap/coredns -n kube-system --type merge -p '{"data":{"Corefile": "'"$NewCoreFile"'"}}'
 
 set +e
