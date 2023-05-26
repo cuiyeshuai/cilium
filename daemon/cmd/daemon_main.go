@@ -1088,6 +1088,9 @@ func initializeFlags() {
 	flags.MarkHidden(option.EnableK8sNetworkPolicy)
 	option.BindEnv(Vp, option.EnableK8sNetworkPolicy)
 
+	flags.Bool(option.EnableCrabName, defaults.EnableCrab, "Enable CRAB LB")
+	option.BindEnv(Vp, option.EnableCrabName)
+
 	if err := Vp.BindPFlags(flags); err != nil {
 		log.Fatalf("BindPFlags failed: %s", err)
 	}

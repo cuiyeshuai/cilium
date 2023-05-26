@@ -1041,7 +1041,9 @@ data:
   mesh-auth-spire-admin-socket: {{ .Values.auth.mTLS.spire.adminSocketPath | quote }}
   mesh-auth-spiffe-trust-domain: {{ .Values.auth.mTLS.spire.trustDomain | quote }}
 {{- end }}
-
+{{- if .Values.crab }}
+  crab: {{ .Values.crab.enabled | quote }}
+{{- end}}
 ---
 {{- if and .Values.ipMasqAgent.enabled .Values.ipMasqAgent.config }}
 apiVersion: v1

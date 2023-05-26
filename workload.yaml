@@ -1,0 +1,178 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webserver-deployment-1
+spec:
+  selector:
+    matchLabels:
+      app: webserver-1
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: webserver-1
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: webserver-2
+            topologyKey: "kubernetes.io/hostname"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webserver-deployment-2
+spec:
+  selector:
+    matchLabels:
+      app: webserver-2
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: webserver-2
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: webserver-1
+            topologyKey: "kubernetes.io/hostname"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webserver-service-1
+spec:
+  selector:
+    app: webserver-1
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  clusterIP: 10.96.0.101
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webserver-service-2
+spec:
+  selector:
+    app: webserver-2
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  clusterIP: 10.96.0.102
+  type: ClusterIP
+
+# apiVersion: v1
+# kind: Pod
+# metadata:
+#   name: nettools-pod
+#   labels:
+#     name: nettools-pod
+# spec:
+#   containers:
+#   - name: nettools
+#     image: jrecord/nettools
+#     command:
+#       - sleep
+#       - "3600"
+#   affinity:
+#     podAffinity:
+#       requiredDuringSchedulingIgnoredDuringExecution:
+#       - labelSelector:
+#           matchLabels:
+#             app: webserver-1
+#         topologyKey: "kubernetes.io/hostname"
+
+
+# ---
+# apiVersion: v1
+# kind: Pod
+# metadata:
+#   name: sleeping-pod
+#   labels:
+#     app: sleeping-pod
+# spec:
+#   containers:
+#   - name: sleeping-container
+#     image: busybox
+#     command: ["sleep", "infinity"]
+#   affinity:
+#     podAntiAffinity:
+#       requiredDuringSchedulingIgnoredDuringExecution:
+#       - labelSelector:
+#           matchExpressions:
+#           - key: name
+#             operator: In
+#             values:
+#             - nettools-pod
+#         topologyKey: "kubernetes.io/hostname"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sleeping-pod
+  labels:
+    app: sleeping-pod
+spec:
+  containers:
+  - name: sleeping-container
+    image: cuiyeshuai/blackhole
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - ubuntu-pod
+        topologyKey: "kubernetes.io/hostname"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sleeping-service
+spec:
+  selector:
+    app: sleeping-pod
+  ports:
+  - protocol: TCP
+    port: 80
+  clusterIP: 10.96.0.100
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ubuntu-pod
+  labels:
+    app: ubuntu-pod
+spec:
+  containers:
+  - name: ubuntu-container
+    image: ubuntu:latest
+    command: 
+      - "sleep"
+      - "infinity"

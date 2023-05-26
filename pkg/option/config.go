@@ -1141,6 +1141,9 @@ const (
 
 	// EnableK8sNetworkPolicy enables support for K8s NetworkPolicy.
 	EnableK8sNetworkPolicy = "enable-k8s-networkpolicy"
+
+	// EnableCrabName enables CRAB LB
+	EnableCrabName = "crab"
 )
 
 // Default string arguments
@@ -2330,6 +2333,9 @@ type DaemonConfig struct {
 
 	// EnableK8sNetworkPolicy enables support for K8s NetworkPolicy.
 	EnableK8sNetworkPolicy bool
+
+	// EnableCrab enables CRAB LB
+	EnableCrab bool
 }
 
 var (
@@ -2379,6 +2385,7 @@ var (
 		EnableVTEP:             defaults.EnableVTEP,
 		EnableBGPControlPlane:  defaults.EnableBGPControlPlane,
 		EnableK8sNetworkPolicy: defaults.EnableK8sNetworkPolicy,
+		EnableCrab:             defaults.EnableCrab,
 	}
 )
 
@@ -3064,6 +3071,7 @@ func (c *DaemonConfig) Populate(vp *viper.Viper) {
 	c.EnablePMTUDiscovery = vp.GetBool(EnablePMTUDiscovery)
 	c.IPv6NAT46x64CIDR = defaults.IPv6NAT46x64CIDR
 	c.IPAMCiliumNodeUpdateRate = vp.GetDuration(IPAMCiliumNodeUpdateRate)
+	c.EnableCrab = vp.GetBool(EnableCrabName)
 
 	c.populateLoadBalancerSettings(vp)
 	c.populateDevices(vp)

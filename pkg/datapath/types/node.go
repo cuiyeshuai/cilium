@@ -97,6 +97,10 @@ type LocalNodeConfiguration struct {
 	// these are then used when encryption is enabled to configure the node
 	// for encryption over these subnets at node initialization.
 	IPv6PodSubnets []*net.IPNet
+
+	// This field is immutable at runtime. The value will not change in
+	// subsequent calls to NodeConfigurationChanged().
+	EnableCrab bool
 }
 
 // NodeHandler handles node related events such as addition, update or deletion

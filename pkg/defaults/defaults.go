@@ -525,6 +525,9 @@ const (
 
 	// EnableK8sNetworkPolicy enables support for K8s NetworkPolicy.
 	EnableK8sNetworkPolicy = true
+
+	// EnableCrab is the default value for Enabling CRAB LB
+	EnableCrab = false
 )
 
 var (
