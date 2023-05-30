@@ -157,12 +157,21 @@ CILIUM_CALL_IPV4_NODEPORT_NAT_FWD // tail_handle_nat_fwd_ipv4
             lb4_extract_tuple(ctx, ip4, ETH_HLEN, &l4_off, &tuple) //tuple{nexthdr(TCP), src_ip, dst_ip, src_port, dst_port}
             ct_has_nodeport_egress_entry4// false
 
-//q: give me steps where the crab in helm value yaml file gets processed
-//a: helm template -> kubectl apply -f - -> k8s api server -> etcd
-//q: Where is helm template stored?
-//a: helm template is stored in the helm chart
-//q: give me actual path
-//a: 
+    snat_v4_prepare_state
+        target{.addr = 0,.egress_gateway = 0}
+        snat_v4_prepare_state //true
+            tuple{protocol, src_ip, dst_ip}
+            target->from_local_endpoint = true;
+        snat_v4_nat
+            snat_v4_nat_can_skip //false
+                snat_v4_track_connection 
+                    ct_lookup4
+        
+        snat_v4_nat_handle_mapping
+            
+
+
+
 
 
 

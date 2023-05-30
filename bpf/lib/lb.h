@@ -1499,6 +1499,52 @@ lb4_to_lb6(struct __ctx_buff *ctx __maybe_unused,
 #endif
 }
 
+#ifdef ENABLE_CRAB
+static __always_inline bool
+not_critical_services(struct ipv4_ct_tuple *tuple) {
+	// TODO: retrieve value from somewhere, e.g. ebpf map.
+	// Avoid interfering with critical services, e.g. kube-dns
+	// return tuple->daddr == bpf_htonl(0x0A600064) || tuple->daddr == bpf_htonl(0x0A600065) || tuple->daddr == bpf_htonl(0x0A600066);
+	if(tuple->daddr == bpf_htonl(0x0A600065)) {
+		return true;
+	}
+	return false;
+}
+static __always_inline struct lb4_service *
+get_crab_service(struct lb4_service *svc) 
+{
+	// TODO: get crab service through ebpf map
+	struct lb4_key key = {};
+
+	key.proto = 0;
+	key.address = bpf_htonl(0x0A600064); //10.96.0.100  
+	key.dport = bpf_htons(80);
+	svc = lb4_lookup_service(&key, is_defined(ENABLE_NODEPORT), false);
+	return svc;
+}
+
+static __always_inline int
+crab_rewrite_egress_client(void *ctx, struct lb4_service *svc, struct ipv4_ct_tuple *tuple, int l3_off, int l4_off, bool has_l4_header)
+{
+
+	struct lb4_backend backend = {};
+	struct lb4_key key = {};
+	// __u32 backend_id;
+	__u32 new_saddr=tuple->saddr;
+	
+	lb4_fill_key(&key, tuple);
+
+	backend.address = bpf_htonl(0x0A600064); //10.96.0.100  
+	backend.port = bpf_htons(80);
+
+	// backend_id = lb4_select_backend_id(ctx, &key, tuple, svc);
+	// backend = lb4_lookup_backend(ctx, backend_id);
+	if (!svc)
+		return DROP_NO_SERVICE;
+	cilium_dbg3(ctx, DBG_CRAB, tuple->daddr, backend.address, 0);
+	return lb4_xlate(ctx, &new_saddr, &(tuple->saddr), tuple->nexthdr, l3_off, l4_off, &key, &backend, has_l4_header, false);
+}
+#endif /* ENABLE_CRAB */
 static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 				     int l3_off, int l4_off,
 				     struct lb4_key *key,

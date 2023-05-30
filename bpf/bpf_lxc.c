@@ -82,12 +82,12 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 	struct ct_state ct_state_new = {};
 	bool has_l4_header;
 	struct lb4_service *svc;
+	void *data, *data_end;
 	struct lb4_key key = {};
 	__u16 proxy_port = 0;
 	__u32 cluster_id = 0;
 	int l4_off;
 	int ret = 0;
-
 	has_l4_header = ipv4_has_l4_header(ip4);
 
 	ret = lb4_extract_tuple(ctx, ip4, ETH_HLEN, &l4_off, &tuple);
@@ -108,6 +108,31 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			goto skip_service_lookup;
 		}
 #endif /* ENABLE_L7_LB */
+#ifdef ENABLE_CRAB
+		cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr,
+			    bpf_ntohs(tuple.dport));
+		if (not_critical_services(&tuple)) {
+			svc = get_crab_service(svc);
+			if (!svc || unlikely(svc->count == 0))
+				return DROP_NO_SERVICE;
+			ret = crab_rewrite_egress_client(ctx, svc, &tuple, ETH_HLEN, l4_off, has_l4_header);
+			if(IS_ERR(ret)) {
+				return ret;
+			}
+			if (!revalidate_data(ctx, &data, &data_end, &ip4))
+				return DROP_INVALID;
+			ret = lb4_extract_tuple(ctx, ip4, ETH_HLEN, &l4_off, &tuple);
+			if (IS_ERR(ret)) {
+				if (ret == DROP_NO_SERVICE || ret == DROP_UNKNOWN_L4)
+					goto skip_service_lookup;
+				else
+					return ret;
+			}
+			lb4_fill_key(&key, &tuple);
+			cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr,
+					bpf_ntohs(tuple.dport));
+		}
+#endif /* ENABLE_CRAB */
 		ret = lb4_local(get_ct_map4(&tuple), ctx, ETH_HLEN, l4_off,
 				&key, &tuple, svc, &ct_state_new,
 				has_l4_header, false, &cluster_id, ext_err);

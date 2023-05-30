@@ -1,5 +1,6 @@
 debug:
   enabled: true
+  verbose: datapath
 image:
   override: "localhost:5000/cilium/cilium-dev:local"
   pullPolicy: Never
