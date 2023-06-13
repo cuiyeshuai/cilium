@@ -172,7 +172,11 @@ metadata:
 spec:
   containers:
   - name: ubuntu-container
-    image: ubuntu:latest
-    command: 
-      - "sleep"
-      - "infinity"
+    image: travelping/nettools
+#ubuntu:latest
+    command: ["/bin/bash", "-c"]
+    args:
+      - |
+        # apt-get update &&
+        # apt-get install -y curl &&
+        sleep infinity

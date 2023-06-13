@@ -123,10 +123,14 @@ enum {
 				 * arg2: daddr (last 4 bytes for IPv6)
 				 * arg3: proxy port (in host byte order)
 				 */
-	DBG_CRAB,   /* arg1: saddr (last 4 bytes for IPv6)
-				 * arg2: daddr (last 4 bytes for IPv6)
+	DBG_CRAB,   /* arg1: saddr 
+				 * arg2: daddr 
 				 * arg3: REDIR_OPT
 				 */
+	DBG_CRAB1,	/* arg1: client_ip
+				 * arg2: service_ip
+				 * arg3: random
+				*/
 };
 
 /* Capture types */
