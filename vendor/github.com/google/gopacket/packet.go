@@ -205,9 +205,10 @@ func (p *packet) recoverDecodeError() {
 // in a single line, with no trailing newline.  This function is specifically
 // designed to do the right thing for most layers... it follows the following
 // rules:
-//  * If the Layer has a String function, just output that.
-//  * Otherwise, output all exported fields in the layer, recursing into
-//    exported slices and structs.
+//   - If the Layer has a String function, just output that.
+//   - Otherwise, output all exported fields in the layer, recursing into
+//     exported slices and structs.
+//
 // NOTE:  This is NOT THE SAME AS fmt's "%#v".  %#v will output both exported
 // and unexported fields... many times packet layers contain unexported stuff
 // that would just mess up the output of the layer, see for example the
@@ -247,11 +248,12 @@ func LayerDump(l Layer) string {
 // LayerString for more details.
 //
 // Params:
-//   i - value to write out
-//   anonymous:  if we're currently recursing an anonymous member of a struct
-//   writeSpace:  if we've already written a value in a struct, and need to
-//     write a space before writing more.  This happens when we write various
-//     anonymous values, and need to keep writing more.
+//
+//	i - value to write out
+//	anonymous:  if we're currently recursing an anonymous member of a struct
+//	writeSpace:  if we've already written a value in a struct, and need to
+//	  write a space before writing more.  This happens when we write various
+//	  anonymous values, and need to keep writing more.
 func layerString(v reflect.Value, anonymous bool, writeSpace bool) string {
 	// Let String() functions take precedence.
 	if v.CanInterface() {
@@ -297,6 +299,14 @@ func layerString(v reflect.Value, anonymous bool, writeSpace bool) string {
 		var b bytes.Buffer
 		b.WriteByte('[')
 		if v.Len() > 4 {
+			if v.Len() < 10 {
+				for j := 0; j < v.Len(); j++ {
+					if j != 0 {
+						b.WriteString(", ")
+					}
+					b.WriteString(layerString(v.Index(j), false, false))
+				}
+			}
 			fmt.Fprintf(&b, "..%d..", v.Len())
 		} else {
 			for j := 0; j < v.Len(); j++ {
@@ -748,18 +758,19 @@ type ZeroCopyPacketDataSource interface {
 // There are currently two different methods for reading packets in through
 // a PacketSource:
 //
-// Reading With Packets Function
+// # Reading With Packets Function
 //
 // This method is the most convenient and easiest to code, but lacks
 // flexibility.  Packets returns a 'chan Packet', then asynchronously writes
 // packets into that channel.  Packets uses a blocking channel, and closes
 // it if an io.EOF is returned by the underlying PacketDataSource.  All other
 // PacketDataSource errors are ignored and discarded.
-//  for packet := range packetSource.Packets() {
-//    ...
-//  }
 //
-// Reading With NextPacket Function
+//	for packet := range packetSource.Packets() {
+//	  ...
+//	}
+//
+// # Reading With NextPacket Function
 //
 // This method is the most flexible, and exposes errors that may be
 // encountered by the underlying PacketDataSource.  It's also the fastest
@@ -767,16 +778,17 @@ type ZeroCopyPacketDataSource interface {
 // read/write.  However, it requires the user to handle errors, most
 // importantly the io.EOF error in cases where packets are being read from
 // a file.
-//  for {
-//    packet, err := packetSource.NextPacket()
-//    if err == io.EOF {
-//      break
-//    } else if err != nil {
-//      log.Println("Error:", err)
-//      continue
-//    }
-//    handlePacket(packet)  // Do something with each packet.
-//  }
+//
+//	for {
+//	  packet, err := packetSource.NextPacket()
+//	  if err == io.EOF {
+//	    break
+//	  } else if err != nil {
+//	    log.Println("Error:", err)
+//	    continue
+//	  }
+//	  handlePacket(packet)  // Do something with each packet.
+//	}
 type PacketSource struct {
 	source  PacketDataSource
 	decoder Decoder
@@ -850,9 +862,9 @@ func (p *PacketSource) packetsToChannel() {
 // PacketDataSource returns an io.EOF error, the channel will be closed.
 // If any other error is encountered, it is ignored.
 //
-//  for packet := range packetSource.Packets() {
-//    handlePacket(packet)  // Do something with each packet.
-//  }
+//	for packet := range packetSource.Packets() {
+//	  handlePacket(packet)  // Do something with each packet.
+//	}
 //
 // If called more than once, returns the same channel.
 func (p *PacketSource) Packets() chan Packet {

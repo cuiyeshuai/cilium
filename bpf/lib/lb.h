@@ -1530,7 +1530,7 @@ crab_rewrite_egress_client(void *ctx, struct lb4_service *svc, struct ipv4_ct_tu
 	struct lb4_backend backend = {};
 	struct lb4_key key = {};
 	// __u32 backend_id;
-	__u32 new_saddr=tuple->saddr;
+	__u32 new_saddr=0;
 	
 	lb4_fill_key(&key, tuple);
 
@@ -1570,7 +1570,6 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 #endif
 	if (unlikely(svc->count == 0))
 		return DROP_NO_SERVICE;
-
 	ret = ct_lb_lookup4(map, tuple, ctx, l4_off, has_l4_header, CT_SERVICE,
 			    state, &monitor);
 	switch (ret) {
