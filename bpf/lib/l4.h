@@ -194,19 +194,25 @@ static __always_inline void update_tcp_checksum(struct __ctx_buff *ctx, struct i
 	tcph->check = csum;
 }
 
-static __always_inline int l4_add_tcp_option(struct __ctx_buff *ctx, __u16 ip_tot_len, struct iphdr *ip4, struct tcphdr* tcph, void* option, enum opt_type type){
+static __always_inline int l4_add_tcp_option(struct __ctx_buff *ctx, __u16 ip_tot_len, struct iphdr *ip4, struct tcphdr* tcph, void* option, enum opt_type type, int l4_off){
 	struct tcphdr tcph_old;
 	__u64 flags = 0;
 	__u16 adjust_len;
 	void *data;
 	void *data_end;
 	struct iphdr *iph;
-	// __be32 sum;
-	// __u16 old_csum;
-	// unsigned short new_csum, temp
-	/* adjust tcp header (and tot length in ip header) */
-	memcpy(&tcph_old, tcph, sizeof(tcph_old));
+	__be32 sum;
+	struct csum_offset csum_off = {};
 
+	if (!revalidate_data(ctx, &data, &data_end, &ip4)) {
+		cilium_dbg3(ctx, 0, 1, 1, 1);
+		return DROP_INVALID;
+	}
+	if ((void*)(tcph + 1) > data_end){
+		cilium_dbg3(ctx, 0, 2, 2, 2);
+		return DROP_INVALID;
+	}
+	memcpy(&tcph_old, tcph, sizeof(tcph_old));
 	flags |= BPF_F_ADJ_ROOM_FIXED_GSO;
 	switch(type){
 		case REDIR_OPT:
@@ -219,54 +225,61 @@ static __always_inline int l4_add_tcp_option(struct __ctx_buff *ctx, __u16 ip_to
 			adjust_len = sizeof(struct redir_opt_double_addr);
 			break;
 		default:
+			cilium_dbg3(ctx, 0, 11, 11, 11);
 			return -1;
 	}
 
 	if (ctx_adjust_hroom(ctx, adjust_len, BPF_ADJ_ROOM_NET, flags)) {
-		cilium_dbg(ctx, 0, 1, 1);
-		return -1;
+		cilium_dbg3(ctx, 0, 3, 3, 3);
+		return DROP_INVALID;
 	}
 
 	// data_end = (void *)(long)ctx->data_end;
 	// data = (void *)(long)ctx->data; 
 
-	if (!revalidate_data_pull(ctx, &data, &data_end, &ip4)) 
-				return DROP_INVALID;
+	if (!revalidate_data_pull(ctx, &data, &data_end, &ip4)) {
+		cilium_dbg3(ctx, 0, 4, 4, 4);
+		return DROP_INVALID;
+	}
 
 	if (data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr) + adjust_len > data_end) {
-		cilium_dbg(ctx, 0, 2, 2);
-		return -1;
+		cilium_dbg3(ctx, 0, 5, 5, 5);
+		return DROP_INVALID;
 	}
 
 	iph = data + sizeof(struct ethhdr);
-	cilium_dbg(ctx, 0, bpf_ntohs(ip_tot_len), bpf_ntohs(ip_tot_len));
-	cilium_dbg(ctx, 0, adjust_len, adjust_len);
 	iph->tot_len = bpf_htons(bpf_ntohs(ip_tot_len) + adjust_len);
-	cilium_dbg(ctx, 0, bpf_ntohs(iph->tot_len), bpf_ntohs(iph->tot_len));
+
 	iph->check = 0;
 	// /* Fix IP checksum */
 	iph->check = csum_fold(csum_diff(NULL, 0, iph,
-						 sizeof(iph), 0));
+						 sizeof(struct iphdr), 0));
 
 	// iph->check = 0;
 	// iph->check = csum_fold(csum_diff(0, 0, (__be32 *)iph, sizeof(struct iphdr), 0));
 
 	// use iph->ihl * 4?
 	tcph = data + sizeof(struct ethhdr) + sizeof(struct iphdr);
-	memcpy(tcph, &tcph_old, sizeof(tcph_old));
 
+	memcpy(tcph, &tcph_old, sizeof(tcph_old));
 	/* add redir opt to tcp header */
 	memcpy((void *)(tcph+1), option, adjust_len);
+
+	if((void*)(tcph) + adjust_len + tcph->doff*4 > data_end) {
+		cilium_dbg3(ctx, 0, data_end-data, tcph->doff*4, adjust_len);
+		return DROP_INVALID;
+	}
 	tcph->doff = tcph->doff + adjust_len / 4;
 
-	/* fix TCP CSUM */
-	//bpf_l4_csum_replace
-	// old_csum = tcph->check;
-	// sum = csum_diff(NULL, 0, option, adjust_len, 0);
-	// temp = ~old_csum + sum;
-	// tcph->check = new_csum;
+	sum = csum_diff(&tcph_old, sizeof(tcph_old), tcph, sizeof(tcph)+adjust_len, 0);
 	
-	update_tcp_checksum(ctx, iph, tcph);
+	csum_l4_offset_and_flags(IPPROTO_TCP, &csum_off);
+	if (csum_l4_replace(ctx, l4_off, &csum_off, 0, sum,
+				    BPF_F_MARK_MANGLED_0) < 0) {
+		cilium_dbg3(ctx, 0, 6, 6, 6);
+		return DROP_CSUM_L4;
+	}
+	// update_tcp_checksum(ctx, iph, tcph);
 	return 0;
 }
 

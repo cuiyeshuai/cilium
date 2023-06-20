@@ -84,14 +84,10 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 	struct lb4_service *svc;
 	void *data, *data_end;
 #ifdef ENABLE_CRAB
-	// __be32 service_ip;
-	// __be32 client_ip;
 	struct redir_opt_double_addr* redir_opt;
 	union tcp_flags tcp_flags = { .value = 0 };
-	// int crab_ret;
 	bool is_tcp_crab = false;
 	bool is_syn_crab = false;
-	// struct opt_parser parser = {};
 #endif /* ENABLE_CRAB */
 	struct lb4_key key = {};
 	__u16 proxy_port = 0;
@@ -132,13 +128,13 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 		// We don't handle critical services like 'kubernetes'
 		if (is_syn_crab && not_critical_services(&tuple)) {
 			// Add the crab redir option
+
 			struct tcphdr *tcph;
 			struct redir_opt_double_addr option_value;
 
 			tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
-			if ((void*)tcph + sizeof(struct tcphdr) > data_end)
-				return DROP_INVALID;
-
+			// if ((void*)tcph + sizeof(struct tcphdr) > data_end)
+			// 	return DROP_INVALID;
 			option_value.type = REDIR_OPT_TYPE_DOUBLE_ADDR;
 			option_value.size = sizeof(struct redir_opt_double_addr);
 			option_value.ip1 = tuple.saddr;
@@ -147,12 +143,17 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			redir_opt = &option_value;
 			send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
 			  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
-			if (l4_add_tcp_option(ctx, ip4->tot_len, ip4, tcph, redir_opt, REDIR_OPT_DOUBLE_ADDR) == -1)
+			if (!revalidate_data(ctx, &data, &data_end, &ip4)) 
 				return DROP_INVALID;
+			if (l4_add_tcp_option(ctx, ip4->tot_len, ip4, tcph, redir_opt, REDIR_OPT_DOUBLE_ADDR, l4_off) < 0) {
+				cilium_dbg3(ctx,0,10,10,10);
+				return DROP_INVALID;
+			}
 			if (!revalidate_data_pull(ctx, &data, &data_end, &ip4)) 
 				return DROP_INVALID;
 			send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
 			  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
+
 			// Redirect the packet to the LB service
 			svc = get_crab_service(svc);     // SVC of crab LB
 			if (!svc || unlikely(svc->count == 0))
@@ -167,6 +168,17 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 				return DROP_INVALID;
 			send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
 			  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
+			ret = lb4_extract_tuple(ctx, ip4, ETH_HLEN, &l4_off, &tuple);
+			if (IS_ERR(ret)) { 
+				if (ret == DROP_NO_SERVICE)   // Not LB SVC IP but LB IP
+					goto skip_service_lookup;
+				else
+					return ret;
+			}
+
+			lb4_fill_key(&key, &tuple);
+			cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr,
+					bpf_ntohs(tuple.dport));
 			// read tcp options again
 			{
 				int i = 0;
@@ -200,19 +212,8 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 					cilium_dbg3(ctx, DBG_CRAB1, client_ip, service_ip, 0);
 				}
 			}
-			//
-			ret = lb4_extract_tuple(ctx, ip4, ETH_HLEN, &l4_off, &tuple);
-			if (IS_ERR(ret)) { 
-				if (ret == DROP_NO_SERVICE)   // Not LB SVC IP but LB IP
-					goto skip_service_lookup;
-				else
-					return ret;
-			}
-
-			lb4_fill_key(&key, &tuple);
-			cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr,
-					bpf_ntohs(tuple.dport));
 		}
+
 	} else {
 		// Dst IP is not a clusterIP, So it should be a egress SYN packet from LB or Backend Service Pod
 		// Check if there is a crab redir option
@@ -260,6 +261,9 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 		goto skip_service_lookup;
 	}
 #endif /*ENABLE_CRAB*/
+		//!!!
+		// if (!svc || unlikely(svc->count == 0))
+		// 		goto skip_service_lookup;
 		ret = lb4_local(get_ct_map4(&tuple), ctx, ETH_HLEN, l4_off,
 				&key, &tuple, svc, &ct_state_new,
 				has_l4_header, false, &cluster_id, ext_err);
