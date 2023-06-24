@@ -259,7 +259,6 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			}
 		}
 		goto skip_service_lookup;
-	}
 #endif /*ENABLE_CRAB*/
 		//!!!
 		// if (!svc || unlikely(svc->count == 0))
@@ -269,6 +268,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 				has_l4_header, false, &cluster_id, ext_err);
 		if (IS_ERR(ret))
 			return ret;
+	}
 
 
 skip_service_lookup:

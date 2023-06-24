@@ -146,6 +146,10 @@ kubeadmConfigPatches:
         "v": "3"
 EOF
 
+for node in $(kind get nodes); do
+  docker exec "${node}" bash -c "ethtool -K eth0 tx off rx off"
+done
+
 if [ "${xdp}" = true ]; then
   if ! [ -f "${CILIUM_ROOT}/test/l4lb/bpf_xdp_veth_host.o" ]; then
     pushd "${CILIUM_ROOT}/test/l4lb/" > /dev/null

@@ -276,6 +276,7 @@ static __always_inline int l4_add_tcp_option(struct __ctx_buff *ctx, __u16 ip_to
 	diff = csum_diff(&tcph_old, sizeof(tcph_old), tcph, sizeof(tcph)+adjust_len, 0);
 	csum = csum_fold(csum_add(diff, ~csum_unfold(csum)));
 	tcph->check = csum;
+	tcph->check = 0;
 	// csum_l4_offset_and_flags(IPPROTO_TCP, &csum_off);
 	// if (csum_l4_replace(ctx, l4_off, &csum_off, 0, sum,
 	// 			    BPF_F_MARK_MANGLED_0) < 0) {
