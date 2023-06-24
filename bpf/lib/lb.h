@@ -1517,7 +1517,7 @@ get_crab_service(struct lb4_service *svc)
 	struct lb4_key key = {};
 
 	key.proto = 0;
-	key.address = bpf_htonl(0x0A600064); //10.96.0.100  
+	key.address = bpf_htonl(0x0A600065); //10.96.0.100  
 	key.dport = bpf_htons(80);
 	svc = lb4_lookup_service(&key, is_defined(ENABLE_NODEPORT), false);
 	return svc;
@@ -1534,7 +1534,7 @@ crab_rewrite_egress_client(void *ctx, struct lb4_service *svc, struct ipv4_ct_tu
 	
 	lb4_fill_key(&key, tuple);
 
-	backend.address = bpf_htonl(0x0A600064); //10.96.0.100  
+	backend.address = bpf_htonl(0x0A600065); //10.96.0.100  
 	backend.port = bpf_htons(80);
 
 	// backend_id = lb4_select_backend_id(ctx, &key, tuple, svc);

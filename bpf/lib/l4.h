@@ -194,15 +194,16 @@ static __always_inline void update_tcp_checksum(struct __ctx_buff *ctx, struct i
 	tcph->check = csum;
 }
 
-static __always_inline int l4_add_tcp_option(struct __ctx_buff *ctx, __u16 ip_tot_len, struct iphdr *ip4, struct tcphdr* tcph, void* option, enum opt_type type, int l4_off){
+static __always_inline int l4_add_tcp_option(struct __ctx_buff *ctx, __u16 ip_tot_len, struct iphdr *ip4, struct tcphdr* tcph, void* option, enum opt_type type){
 	struct tcphdr tcph_old;
 	__u64 flags = 0;
 	__u16 adjust_len;
 	void *data;
 	void *data_end;
 	struct iphdr *iph;
-	__be32 sum;
-	struct csum_offset csum_off = {};
+	__be32 diff;
+	__u16 csum;
+	// struct csum_offset csum_off = {};
 
 	if (!revalidate_data(ctx, &data, &data_end, &ip4)) {
 		cilium_dbg3(ctx, 0, 1, 1, 1);
@@ -260,7 +261,7 @@ static __always_inline int l4_add_tcp_option(struct __ctx_buff *ctx, __u16 ip_to
 
 	// use iph->ihl * 4?
 	tcph = data + sizeof(struct ethhdr) + sizeof(struct iphdr);
-
+	//ctx_store_bytes
 	memcpy(tcph, &tcph_old, sizeof(tcph_old));
 	/* add redir opt to tcp header */
 	memcpy((void *)(tcph+1), option, adjust_len);
@@ -271,14 +272,16 @@ static __always_inline int l4_add_tcp_option(struct __ctx_buff *ctx, __u16 ip_to
 	}
 	tcph->doff = tcph->doff + adjust_len / 4;
 
-	sum = csum_diff(&tcph_old, sizeof(tcph_old), tcph, sizeof(tcph)+adjust_len, 0);
-	
-	csum_l4_offset_and_flags(IPPROTO_TCP, &csum_off);
-	if (csum_l4_replace(ctx, l4_off, &csum_off, 0, sum,
-				    BPF_F_MARK_MANGLED_0) < 0) {
-		cilium_dbg3(ctx, 0, 6, 6, 6);
-		return DROP_CSUM_L4;
-	}
+	csum = tcph->check;
+	diff = csum_diff(&tcph_old, sizeof(tcph_old), tcph, sizeof(tcph)+adjust_len, 0);
+	csum = csum_fold(csum_add(diff, ~csum_unfold(csum)));
+	tcph->check = csum;
+	// csum_l4_offset_and_flags(IPPROTO_TCP, &csum_off);
+	// if (csum_l4_replace(ctx, l4_off, &csum_off, 0, sum,
+	// 			    BPF_F_MARK_MANGLED_0) < 0) {
+	// 	cilium_dbg3(ctx, 0, 6, 6, 6);
+	// 	return DROP_CSUM_L4;
+	// }
 	// update_tcp_checksum(ctx, iph, tcph);
 	return 0;
 }

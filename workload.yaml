@@ -21,8 +21,12 @@ spec:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
-              matchLabels:
-                app: webserver-2
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - ubuntu-pod
+                  - webserver-2
             topologyKey: "kubernetes.io/hostname"
 
 ---
@@ -49,8 +53,12 @@ spec:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
-              matchLabels:
-                app: webserver-1
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - ubuntu-pod
+                  - webserver-1
             topologyKey: "kubernetes.io/hostname"
 
 ---

@@ -145,7 +145,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
 			if (!revalidate_data(ctx, &data, &data_end, &ip4)) 
 				return DROP_INVALID;
-			if (l4_add_tcp_option(ctx, ip4->tot_len, ip4, tcph, redir_opt, REDIR_OPT_DOUBLE_ADDR, l4_off) < 0) {
+			if (l4_add_tcp_option(ctx, ip4->tot_len, ip4, tcph, redir_opt, REDIR_OPT_DOUBLE_ADDR) < 0) {
 				cilium_dbg3(ctx,0,10,10,10);
 				return DROP_INVALID;
 			}
