@@ -84,7 +84,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 	struct lb4_service *svc;
 	void *data, *data_end;
 #ifdef ENABLE_CRAB
-	struct redir_opt_double_addr* redir_opt;
+	struct redir_opt_complete* redir_opt;
 	union tcp_flags tcp_flags = { .value = 0 };
 	bool is_tcp_crab = false;
 	bool is_syn_crab = false;
@@ -130,22 +130,25 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			// Add the crab redir option
 
 			struct tcphdr *tcph;
-			struct redir_opt_double_addr option_value;
+			struct redir_opt_complete option_value;
 
 			tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
-			// if ((void*)tcph + sizeof(struct tcphdr) > data_end)
-			// 	return DROP_INVALID;
-			option_value.type = REDIR_OPT_TYPE_DOUBLE_ADDR;
-			option_value.size = sizeof(struct redir_opt_double_addr);
+			if ((void*)tcph + sizeof(struct tcphdr) > data_end)
+				return DROP_INVALID;
+			option_value.type = REDIR_OPT_TYPE_COMPLETE;
+			option_value.size = sizeof(struct redir_opt_complete);
 			option_value.ip1 = tuple.saddr;
 			option_value.ip2 = tuple.daddr;
-			option_value.padding = (__u16)0;
+			option_value.port1 = tcph->source;
+			option_value.port2 = tcph->dest;
+			option_value.index = (__u8)0;
+			option_value.padding = (__u8)0;
 			redir_opt = &option_value;
 			send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
 			  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
 			if (!revalidate_data(ctx, &data, &data_end, &ip4)) 
 				return DROP_INVALID;
-			if (l4_add_tcp_option(ctx, ip4->tot_len, ip4, tcph, redir_opt, REDIR_OPT_DOUBLE_ADDR) < 0) {
+			if (crab_add_tcp_option(ctx, ip4->tot_len, ip4, tcph, redir_opt, REDIR_OPT_COMPLETE) < 0) {
 				cilium_dbg3(ctx,0,10,10,10);
 				return DROP_INVALID;
 			}
@@ -158,9 +161,9 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			svc = get_crab_service(svc);     // SVC of crab LB
 			if (!svc || unlikely(svc->count == 0))
 				return DROP_NO_SERVICE;
-
+			cilium_dbg3(ctx, 0, 25, 25, 25);
 			ret = crab_rewrite_egress_client(ctx, svc, &tuple, ETH_HLEN, l4_off, has_l4_header); // Rewrite dst IP to crab LB SVC IP
-
+			cilium_dbg3(ctx, 0, 26, 26, 26);
 			if(IS_ERR(ret)) {
 				return ret;
 			}
@@ -179,41 +182,46 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			lb4_fill_key(&key, &tuple);
 			cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr,
 					bpf_ntohs(tuple.dport));
+			cilium_dbg3(ctx, 0, 26, 26, 26);
 			// read tcp options again
-			{
-				int i = 0;
-				int offset;
-				struct opt_parser parser = {};
-				int crab_parse_ret;
-				tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
-				send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
-			  		TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
-				if ((void*)tcph + sizeof(struct tcphdr) > data_end)
-					return DROP_INVALID;
+			// {
+			// 	int i = 0;
+			// 	int offset;
+			// 	struct opt_parser parser = {};
+			// 	int crab_parse_ret;
+			// 	tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
+			// 	send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
+			//   		TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
+			// 	if ((void*)tcph + sizeof(struct tcphdr) > data_end)
+			// 		return DROP_INVALID;
 				
-				offset = tcph->doff * 4;
-				parser.cur_pos = (__u8 *)(tcph + 1);
-				parser.rest_len = (__u8)offset - sizeof(struct tcphdr);
-				cilium_dbg3(ctx, 0, (__u8)offset - sizeof(struct tcphdr), (__u8)offset - sizeof(struct tcphdr), 0);
-				for (i=0; i < MAX_TCP_OPT_LENGTH; i++){
-					crab_parse_ret = l4_parse_tcp_options(ctx, &parser, REDIR_OPT_TYPE_DOUBLE_ADDR);
-					if (crab_parse_ret)
-						break;
-				}
-				cilium_dbg3(ctx, 0, crab_parse_ret, crab_parse_ret, 0);
-				if (crab_parse_ret == 1) { // Found option, LB egress, nothing special to do
-					__be32 service_ip;
-					__be32 client_ip;
-					redir_opt = (struct redir_opt_double_addr *)parser.cur_pos;
-					if ((void*)redir_opt + sizeof(struct redir_opt_double_addr) > data_end)
-						return -1;
-					client_ip = redir_opt->ip1;
-					service_ip = redir_opt->ip2;
-					cilium_dbg3(ctx, DBG_CRAB1, client_ip, service_ip, 0);
-				}
-			}
+			// 	offset = tcph->doff * 4;
+			// 	parser.cur_pos = (__u8 *)(tcph + 1);
+			// 	parser.rest_len = (__u8)offset - sizeof(struct tcphdr);
+			// 	cilium_dbg3(ctx, 0, (__u8)offset - sizeof(struct tcphdr), (__u8)offset - sizeof(struct tcphdr), 0);
+			// 	for (i=0; i < MAX_TCP_OPT_LENGTH; i++){
+			// 		crab_parse_ret = l4_parse_tcp_options(ctx, &parser, REDIR_OPT_TYPE_COMPLETE);
+			// 		if (crab_parse_ret)
+			// 			break;
+			// 	}
+			// 	cilium_dbg3(ctx, 0, crab_parse_ret, crab_parse_ret, 0);
+			// 	if (crab_parse_ret == 1) { // Found option, LB egress, nothing special to do
+			// 		__be32 service_ip;
+			// 		__be32 client_ip;
+			// 		redir_opt = (struct redir_opt_complete *)parser.cur_pos;
+			// 		if ((void*)redir_opt + sizeof(struct redir_opt_complete) > data_end)
+			// 			return -1;
+			// 		client_ip = redir_opt->ip1;
+			// 		service_ip = redir_opt->ip2;
+			// 		cilium_dbg3(ctx, DBG_CRAB1, client_ip, service_ip, 0);
+			// 	}
+			// }
 		}
-
+		ret = lb4_local(get_ct_map4(&tuple), ctx, ETH_HLEN, l4_off,
+				&key, &tuple, svc, &ct_state_new,
+				has_l4_header, false, &cluster_id, ext_err);
+		if (IS_ERR(ret))
+			return ret;
 	} else {
 		// Dst IP is not a clusterIP, So it should be a egress SYN packet from LB or Backend Service Pod
 		// Check if there is a crab redir option
@@ -248,8 +256,8 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			if (crab_parse_ret == 1) { // Found option, LB egress, nothing special to do
 				__be32 service_ip;
 				__be32 client_ip;
-				redir_opt = (struct redir_opt_double_addr *)parser.cur_pos;
-				if ((void*)redir_opt + sizeof(struct redir_opt_double_addr) > data_end)
+				redir_opt = (struct redir_opt_complete *)parser.cur_pos;
+				if ((void*)redir_opt + sizeof(struct redir_opt_complete) > data_end)
 					return -1;
 				client_ip = redir_opt->ip1;
 				service_ip = redir_opt->ip2;
