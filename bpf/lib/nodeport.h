@@ -2103,6 +2103,14 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 	struct ct_state ct_state_new = {};
 	__u32 cluster_id = 0;
 	__u32 monitor = 0;
+#if defined(ENABLE_CRAB)
+	int i = 0;
+	int offset;
+	struct opt_parser parser = {};
+	int crab_parse_ret;
+	struct tcphdr *tcph;
+	struct redir_opt_complete *redir_opt;
+#endif /*ENABLE_CRAB*/
 
 	cilium_capture_in(ctx);
 
@@ -2110,6 +2118,95 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		return DROP_INVALID;
 
 	has_l4_header = ipv4_has_l4_header(ip4);
+
+#if defined(ENABLE_CRAB)
+	tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
+	if ((void*)tcph + sizeof(struct tcphdr) > data_end)
+		return DROP_INVALID;
+	
+	offset = tcph->doff * 4;
+	parser.cur_pos = (__u8 *)(tcph + 1);
+	parser.cur_offset = 0;
+	parser.rest_len = (__u8)offset - sizeof(struct tcphdr);
+	for (i=0; i < MAX_TCP_OPT_LENGTH; i++){
+		crab_parse_ret = l4_parse_tcp_options(ctx, &parser, REDIR_OPT_TYPE_COMPLETE);
+		if (crab_parse_ret)
+			break;
+	}
+	cilium_dbg3(ctx, 0, crab_parse_ret, crab_parse_ret, 0);
+	if (crab_parse_ret == 1) { // Found option, LB egress, nothing special to do
+		redir_opt = (struct redir_opt_complete *)parser.cur_pos;
+		if ((void*)redir_opt + sizeof(struct redir_opt_complete) > data_end)
+			return -1;
+		cilium_dbg3(ctx, 0, 19, 19, 19);
+	} else goto skip_crab;
+
+	// check index
+	if (redir_opt->index == 0) {
+		// write service ip & port to packet
+		__be32 new_daddr = redir_opt->ip2;
+		__u16 old_port;
+		__u16 new_port = redir_opt->port2;
+		int diff;
+		struct csum_offset csum_off = {};
+		__u8 index;
+		__u8 old_index;
+		l4_off = l3_off + ipv4_hdrlen(ip4);
+
+		// Modify dest ip
+		ret = ctx_store_bytes(ctx, l3_off + offsetof(struct iphdr, daddr),
+			      &new_daddr, 4, 0);
+		if (ret < 0) return DROP_WRITE_ERROR;
+		if (!revalidate_data(ctx, &data, &data_end, &ip4))
+			return DROP_INVALID;
+		diff = csum_diff(NULL, 0, ip4, sizeof(struct iphdr), 0);
+		if (ipv4_csum_update_by_diff(ctx, l3_off, diff) < 0)
+			return DROP_CSUM_L3;
+
+		// Modify dest port
+		if (!revalidate_data(ctx, &data, &data_end, &ip4))
+			return DROP_INVALID;
+		tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
+		if ((void*)tcph + sizeof(struct tcphdr) > data_end)
+			return DROP_INVALID;
+		old_port = tcph->dest;
+		ret = ctx_store_bytes(ctx, l3_off + sizeof(struct iphdr) + offsetof(struct tcphdr, dest),
+			      &new_port, 2, 0);
+		if (ret < 0) return DROP_WRITE_ERROR;
+		if (!revalidate_data(ctx, &data, &data_end, &ip4))
+			return DROP_INVALID;
+		csum_l4_offset_and_flags(IPPROTO_TCP, &csum_off);
+		if (csum_l4_replace(ctx, l4_off, &csum_off, old_port, new_port, sizeof(new_port)) < 0)
+			return DROP_CSUM_L4;
+		
+		// increment index
+		if (!revalidate_data(ctx, &data, &data_end, &ip4))
+			return DROP_INVALID;
+
+		// check packet boundary
+		tcph = (void*)ip4 + ipv4_hdrlen(ip4);
+		if ((void*)tcph + sizeof(struct tcphdr) + sizeof(struct redir_opt_complete) > data_end)
+			return DROP_INVALID;
+		redir_opt = (struct redir_opt_complete *)((void*)tcph + sizeof(struct tcphdr));
+		old_index = redir_opt->index;
+		index = old_index + 1;
+		ret = ctx_store_bytes(ctx, l3_off + sizeof(struct iphdr) + sizeof(struct iphdr) + offsetof(struct redir_opt_complete, index),
+			      &index, 1, 0);
+		if (ret < 0) return DROP_WRITE_ERROR;
+		if (!revalidate_data(ctx, &data, &data_end, &ip4))
+			return DROP_INVALID;
+		// redir_opt->index++;
+		diff = csum_diff(&index, 1, &old_index, 1, 0);
+		csum_l4_offset_and_flags(IPPROTO_TCP, &csum_off);
+		if (csum_l4_replace(ctx, l4_off, &csum_off, 0, diff, 0) < 0)
+			return DROP_CSUM_L4;
+	}
+	if (!revalidate_data(ctx, &data, &data_end, &ip4))
+		return DROP_INVALID;
+	has_l4_header = ipv4_has_l4_header(ip4);
+
+skip_crab:
+#endif /*ENABLE_CRAB*/
 
 	ret = lb4_extract_tuple(ctx, ip4, ETH_HLEN, &l4_off, &tuple);
 	if (IS_ERR(ret)) {

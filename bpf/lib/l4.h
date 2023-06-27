@@ -71,6 +71,7 @@ struct __attribute__((packed)) redir_opt_complete {
 
 struct opt_parser{
 	__u8 *cur_pos;
+	__u8 cur_offset;
 	__u8 cur_size;
 	__u8 rest_len;
 };
@@ -150,6 +151,7 @@ static __always_inline int l4_parse_tcp_options(struct __ctx_buff *ctx, struct o
 	}
 	if (opt_type == TCP_OPT_NOP){
 		parser->cur_pos++;
+		parser->cur_offset++;
 		parser->rest_len--;
 		return 0;
 	}
@@ -167,6 +169,7 @@ static __always_inline int l4_parse_tcp_options(struct __ctx_buff *ctx, struct o
 	parser->cur_size = parser->cur_pos[1];
 	parser->rest_len -= parser->cur_size;
 	parser->cur_pos += parser->cur_size;
+	parser->cur_offset += parser->cur_size;
 	return 0;
 }
 
@@ -478,7 +481,11 @@ static __always_inline int crab_add_tcp_option(struct __ctx_buff *ctx, __u16 ip_
 	ctx_store_bytes(ctx, l4_off, &tcph_buff, sizeof(tcph_buff), BPF_F_RECOMPUTE_CSUM);
 	csum_l4_offset_and_flags(IPPROTO_TCP, &csum_off);
 	diff = csum_diff(&tcph_old, sizeof(tcph_old), &tcph_buff, sizeof(tcph_buff), 0);
-
+	if (csum_l4_replace(ctx, l4_off, &csum_off, 0, diff,
+				    BPF_F_MARK_MANGLED_0) < 0) {
+		cilium_dbg3(ctx, 0, 7, 7, 7);
+		return DROP_CSUM_L4;
+	}
 	if (!revalidate_data_pull(ctx, &data, &data_end, &ip4)) {
 		cilium_dbg3(ctx, 0, 4, 4, 4);
 		return DROP_INVALID;

@@ -197,6 +197,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 				
 			// 	offset = tcph->doff * 4;
 			// 	parser.cur_pos = (__u8 *)(tcph + 1);
+			//  parser.cur_offset = 0;
 			// 	parser.rest_len = (__u8)offset - sizeof(struct tcphdr);
 			// 	cilium_dbg3(ctx, 0, (__u8)offset - sizeof(struct tcphdr), (__u8)offset - sizeof(struct tcphdr), 0);
 			// 	for (i=0; i < MAX_TCP_OPT_LENGTH; i++){
@@ -246,6 +247,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			
 			offset = tcph->doff * 4;
 			parser.cur_pos = (__u8 *)(tcph + sizeof(struct tcphdr));
+			parser.cur_offset = 0;
 			parser.rest_len = (__u8)offset - sizeof(struct tcphdr);
 			for (i=0; i < MAX_TCP_OPT_LENGTH; i++){
 				crab_parse_ret = l4_parse_tcp_options(ctx, &parser, REDIR_OPT_TYPE_DOUBLE_ADDR);

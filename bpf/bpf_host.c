@@ -579,10 +579,30 @@ handle_ipv4(struct __ctx_buff *ctx, __u32 secctx __maybe_unused,
 #endif
 
 #ifdef ENABLE_NODEPORT
+	cilium_dbg3(ctx, 0, 20,20,20);
 	if (!from_host) {
+#if defined(ENABLE_CRAB)
+		int ret = nodeport_lb4(ctx, secctx, ext_err);
+		cilium_dbg3(ctx, 0, 21,21,21);
+		if (ret == NAT_46X64_RECIRC) {
+			ctx_store_meta(ctx, CB_SRC_LABEL, secctx);
+			ep_tail_call(ctx, CILIUM_CALL_IPV6_FROM_NETDEV);
+			return DROP_MISSED_TAIL_CALL;
+		}
+
+		/* nodeport_lb4() returns with TC_ACT_REDIRECT for
+			* traffic to L7 LB. Policy enforcement needs to take
+			* place after L7 LB has processed the packet, so we
+			* return to stack immediately here with
+			* TC_ACT_REDIRECT.
+			*/
+		if (ret < 0 || ret == TC_ACT_REDIRECT)
+			return ret;
+	}
+#else
 		if (!ctx_skip_nodeport(ctx)) {
 			int ret = nodeport_lb4(ctx, secctx, ext_err);
-
+			cilium_dbg3(ctx, 0, 21,21,21);
 			if (ret == NAT_46X64_RECIRC) {
 				ctx_store_meta(ctx, CB_SRC_LABEL, secctx);
 				ep_tail_call(ctx, CILIUM_CALL_IPV6_FROM_NETDEV);
@@ -599,6 +619,7 @@ handle_ipv4(struct __ctx_buff *ctx, __u32 secctx __maybe_unused,
 				return ret;
 		}
 	}
+#endif /* ENABLE_CRAB */
 #endif /* ENABLE_NODEPORT */
 
 #ifdef ENABLE_HOST_FIREWALL

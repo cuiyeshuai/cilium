@@ -178,7 +178,7 @@ bpf_host.ll: bpf_host.c $(LIB)
 			${LLC} ${LLC_FLAGS} -o /dev/null $@; ) \
 	fi
 	@$(ECHO_CC)
-	$(QUIET) ${CLANG} ${MAX_HOST_OPTIONS} ${CLANG_FLAGS} -c $< -o $@
+	$(QUIET) ${CLANG} ${CRAB_OPTIONS} ${CLANG_FLAGS} -c $< -o $@
 
 bpf_host.o: bpf_host.ll
 	@$(ECHO_CC)
@@ -212,7 +212,7 @@ bpf_xdp.ll: bpf_xdp.c $(LIB)
 			${LLC} ${LLC_FLAGS} -o /dev/null $@; ) \
 	fi
 	@$(ECHO_CC)
-	$(QUIET) ${CLANG} ${MAX_XDP_OPTIONS} ${CLANG_FLAGS} -c $< -o $@
+	$(QUIET) ${CLANG} ${CRAB_OPTIONS} ${CLANG_FLAGS} -c $< -o $@
 
 bpf_xdp.o: bpf_xdp.ll
 	@$(ECHO_CC)
