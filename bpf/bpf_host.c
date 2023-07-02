@@ -582,22 +582,25 @@ handle_ipv4(struct __ctx_buff *ctx, __u32 secctx __maybe_unused,
 	cilium_dbg3(ctx, 0, 20,20,20);
 	if (!from_host) {
 #if defined(ENABLE_CRAB)
-		int ret = nodeport_lb4(ctx, secctx, ext_err);
-		cilium_dbg3(ctx, 0, 21,21,21);
-		if (ret == NAT_46X64_RECIRC) {
-			ctx_store_meta(ctx, CB_SRC_LABEL, secctx);
-			ep_tail_call(ctx, CILIUM_CALL_IPV6_FROM_NETDEV);
-			return DROP_MISSED_TAIL_CALL;
-		}
+		cilium_dbg3(ctx, 0,25,25,25);
+		if (!ctx_skip_nodeport(ctx)) {
+			int ret = nodeport_lb4(ctx, secctx, ext_err);
+			cilium_dbg3(ctx, 0, 21,21,21);
+			if (ret == NAT_46X64_RECIRC) {
+				ctx_store_meta(ctx, CB_SRC_LABEL, secctx);
+				ep_tail_call(ctx, CILIUM_CALL_IPV6_FROM_NETDEV);
+				return DROP_MISSED_TAIL_CALL;
+			}
 
-		/* nodeport_lb4() returns with TC_ACT_REDIRECT for
-			* traffic to L7 LB. Policy enforcement needs to take
-			* place after L7 LB has processed the packet, so we
-			* return to stack immediately here with
-			* TC_ACT_REDIRECT.
-			*/
-		if (ret < 0 || ret == TC_ACT_REDIRECT)
-			return ret;
+			/* nodeport_lb4() returns with TC_ACT_REDIRECT for
+				* traffic to L7 LB. Policy enforcement needs to take
+				* place after L7 LB has processed the packet, so we
+				* return to stack immediately here with
+				* TC_ACT_REDIRECT.
+				*/
+			if (ret < 0 || ret == TC_ACT_REDIRECT)
+				return ret;
+		}
 	}
 #else
 		if (!ctx_skip_nodeport(ctx)) {
@@ -621,7 +624,7 @@ handle_ipv4(struct __ctx_buff *ctx, __u32 secctx __maybe_unused,
 	}
 #endif /* ENABLE_CRAB */
 #endif /* ENABLE_NODEPORT */
-
+	cilium_dbg3(ctx, 0, 26,26,26);
 #ifdef ENABLE_HOST_FIREWALL
 	if (from_host) {
 		/* We're on the egress path of cilium_host. */
@@ -880,6 +883,7 @@ tail_handle_ipv4(struct __ctx_buff *ctx, __u32 ipcache_srcid, const bool from_ho
 	ctx_store_meta(ctx, CB_SRC_LABEL, 0);
 
 	ret = handle_ipv4(ctx, proxy_identity, ipcache_srcid, from_host, &ext_err);
+	cilium_dbg3(ctx, 0, 34, 34, 34);
 
 	/* TC_ACT_REDIRECT is not an error, but it means we should stop here. */
 	if (ret == CTX_ACT_OK) {
@@ -1254,7 +1258,10 @@ int cil_from_netdev(struct __ctx_buff *ctx)
 	};
 #endif
 #endif
-
+	cilium_dbg3(ctx, 0,0,0,0);
+	send_trace_notify(ctx, TRACE_FROM_NETWORK, 0, 0, 0,
+				  ctx->ingress_ifindex,
+				  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
 	/* Filter allowed vlan id's and pass them back to kernel.
 	 * We will see the packet again in from-netdev@eth0.vlanXXX.
 	 */

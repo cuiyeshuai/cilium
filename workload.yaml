@@ -27,6 +27,7 @@ spec:
                   values:
                   - ubuntu-pod
                   - webserver-2
+                  - sleeping-pod
             topologyKey: "kubernetes.io/hostname"
 
 ---
