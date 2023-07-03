@@ -67,6 +67,8 @@ struct __attribute__((packed)) redir_opt_complete {
 	__u16 port2;
 	__u8 index;
 	__u8 padding;
+	__u16 temp;
+	__u16 padding1;
 };
 
 struct opt_parser{

@@ -143,6 +143,8 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			option_value.port2 = tcph->dest;
 			option_value.index = (__u8)0;
 			option_value.padding = (__u8)0;
+			option_value.temp = (__u16)0;
+			option_value.padding1 = (__u16)0;
 			redir_opt = &option_value;
 			send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
 			  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
