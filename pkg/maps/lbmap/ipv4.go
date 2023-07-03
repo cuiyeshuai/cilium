@@ -37,6 +37,8 @@ const (
 	Backend4MapV3Name = "cilium_lb4_backends_v3"
 	// RevNat4MapName is the name of the IPv4 LB reverse NAT BPF map.
 	RevNat4MapName = "cilium_lb4_reverse_nat"
+	// Crab4MapName is the name of the IPv4 LB crab BPF map.
+	Crab4MapName = "cilium_lb4_crab"
 )
 
 var (
@@ -56,6 +58,8 @@ var (
 	Backend4MapV3 *bpf.Map
 	// RevNat4Map is the IPv4 LB reverse NAT BPF map.
 	RevNat4Map *bpf.Map
+	// Crab4Map is the IPv4 LB crab BPF map.
+	Crab4Map *bpf.Map
 )
 
 // initSVC constructs the IPv4 & IPv6 LB BPF maps used for Services. The maps
@@ -122,6 +126,17 @@ func initSVC(params InitParams) {
 			bpf.ConvertKeyValue,
 		).WithCache().WithPressureMetric().
 			WithEvents(option.Config.GetEventBufferConfig(RevNat4MapName))
+		Crab4Map = bpf.NewMap(Crab4MapName,
+			bpf.MapTypeHash,
+			&Crab4Key{},
+			int(unsafe.Sizeof(Crab4Key{})),
+			&Crab4Value{},
+			int(unsafe.Sizeof(Crab4Value{})),
+			ServiceBackEndMapMaxEntries,
+			0, 0,
+			bpf.ConvertKeyValue,
+		).WithCache().WithPressureMetric().
+			WithEvents(option.Config.GetEventBufferConfig(Crab4MapName))
 	}
 
 	if params.IPv6 {
@@ -195,6 +210,77 @@ var _ BackendValue = (*Backend4ValueV3)(nil)
 var _ Backend = (*Backend4)(nil)
 var _ Backend = (*Backend4V2)(nil)
 var _ Backend = (*Backend4V3)(nil)
+var _ CrabKey = (*Crab4Key)(nil)
+var _ CrabValue = (*Crab4Value)(nil)
+
+// +k8s:deepcopy-gen=true
+// +k8s:deepcopy-gen:interfaces=github.com/cilium/cilium/pkg/bpf.MapKey
+type Crab4Key struct {
+	Address types.IPv4 `align:"address"`
+	Port    uint16     `align:"port"`
+}
+
+func NewCrab4Key(ip net.IP, port uint16) *Crab4Key {
+	key := &Crab4Key{
+		Port: port,
+	}
+	copy(key.Address[:], ip.To4())
+	return key
+}
+
+func (k *Crab4Key) Map() *bpf.Map             { return Crab4Map }
+func (k *Crab4Key) NewValue() bpf.MapValue    { return &Crab4Value{} }
+func (k *Crab4Key) GetKeyPtr() unsafe.Pointer { return unsafe.Pointer(k) }
+func (k *Crab4Key) GetAddress() net.IP        { return k.Address.IP() }
+func (k *Crab4Key) GetPort() uint16           { return k.Port }
+func (k *Crab4Key) ToNetwork()
+func (k *Crab4Key) String() string {
+	return net.JoinHostPort(kHost.Address.String(), fmt.Sprintf("%d", kHost.Port))
+}
+
+func (k *Crab4Key) ToNetwork() Crab4Key {
+	n := *k
+	n.Port = byteorder.HostToNetwork16(n.Port)
+	return &n
+}
+
+// ToHost converts Service4Key to host byte order.
+func (k *Crab4Key) ToHost() Crab4Key {
+	h := *k
+	h.Port = byteorder.NetworkToHost16(h.Port)
+	return &h
+}
+
+// +k8s:deepcopy-gen=true
+// +k8s:deepcopy-gen:interfaces=github.com/cilium/cilium/pkg/bpf.MapValue
+type Crab4Value struct {
+	Address types.IPv4 `align:"address"`
+	Port    uint16     `align:"port"`
+}
+
+func (v *Crab4Value) GetValuePtr() unsafe.Pointer { return unsafe.Pointer(v) }
+
+// ToNetwork converts Crab4Value to network byte order.
+func (v *Crab4Value) ToNetwork() CrabValue {
+	n := *v
+	n.Port = byteorder.HostToNetwork16(n.Port)
+	return &n
+}
+
+func (v *Crab4Value) GetServiceIP() net.IP   { return v.Address.IP() }
+func (v *Crab4Value) GetServicePort() uint16 { return v.Port }
+
+// ToHost converts Crab4Value to host byte order.
+func (k *Crab4Value) ToHost() CrabValue {
+	h := *k
+	h.Port = byteorder.NetworkToHost16(h.Port)
+	return &h
+}
+
+func (v *Crab4Value) String() string {
+	vHost := v.ToHost().(*Crab4Value)
+	return net.JoinHostPort(vHost.Address.String(), fmt.Sprintf("%d", vHost.Port))
+}
 
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=github.com/cilium/cilium/pkg/bpf.MapKey

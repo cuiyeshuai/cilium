@@ -514,9 +514,9 @@ func (s *Service) InitMaps(ipv6, ipv4, sockMaps, restore bool) error {
 		v2BackendMapExistsV6 = lbmap.Backend6MapV2.Open() == nil
 	}
 	if ipv4 {
-		toOpen = append(toOpen, lbmap.Service4MapV2, lbmap.Backend4MapV3, lbmap.RevNat4Map)
+		toOpen = append(toOpen, lbmap.Service4MapV2, lbmap.Backend4MapV3, lbmap.RevNat4Map, lbmap.Crab4Map)
 		if !restore {
-			toDelete = append(toDelete, lbmap.Service4MapV2, lbmap.Backend4MapV3, lbmap.RevNat4Map)
+			toDelete = append(toDelete, lbmap.Service4MapV2, lbmap.Backend4MapV3, lbmap.RevNat4Map, lbmap.Crab4Map)
 		}
 		if sockMaps {
 			if err := lbmap.CreateSockRevNat4Map(); err != nil {

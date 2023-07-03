@@ -897,6 +897,11 @@ struct ipv4_ct_tuple {
 	__u8		flags;
 } __packed;
 
+struct crab4_pair {
+	__be32      addr;
+	__be16      port;
+} __packed;
+
 struct ct_entry {
 	__u64 rx_packets;
 	/* Previously, the rx_bytes field was not used for entries with

@@ -351,6 +351,10 @@ func (d *Daemon) getBPFMapStatus() *models.BPFMapStatus {
 				Size: int64(lbmap.ServiceMapMaxEntries),
 			},
 			{
+				Name: "Crab temp storage",
+				Size: int64(lbmap.ServiceBackEndMapMaxEntries),
+			},
+			{
 				Name: "IPv6 service", // cilium_lb6_services_v2
 				Size: int64(lbmap.ServiceMapMaxEntries),
 			},

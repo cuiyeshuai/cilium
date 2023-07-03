@@ -174,6 +174,41 @@ type RevNatValue interface {
 	ToHost() RevNatValue
 }
 
+type CrabKey interface {
+	bpf.MapKey
+
+	// Returns the BPF map matching the key type
+	Map() *bpf.Map
+
+	// ToNetwork converts fields to network byte order.
+	ToNetwork() CrabKey
+
+	// Get frontend IP address
+	GetAddress() net.IP
+
+	// Get frontend port
+	GetPort() uint16
+
+	// ToHost converts fields to host byte order.
+	ToHost() CrabKey
+}
+
+type CrabValue interface {
+	bpf.MapValue
+
+	// ToNetwork converts fields to network byte order.
+	ToNetwork() CrabValue
+
+	// ToHost converts fields to host byte order.
+	ToHost() CrabValue
+
+	// Get service ip address
+	GetServiceIP() net.IP
+
+	// Get service port
+	GetServicePort() uint16
+}
+
 func svcFrontend(svcKey ServiceKey, svcValue ServiceValue) *loadbalancer.L3n4AddrID {
 	feIP := svcKey.GetAddress()
 	feAddrCluster := cmtypes.MustAddrClusterFromIP(feIP)
