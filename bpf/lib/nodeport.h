@@ -2142,7 +2142,6 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		redir_opt = (struct redir_opt_complete *)parser.cur_pos;
 		if ((void*)redir_opt + sizeof(struct redir_opt_complete) > data_end)
 			goto skip_crab;
-		cilium_dbg3(ctx, 0, 19, 19, 19);
 	} else goto skip_crab;
 
 	// check index
@@ -2156,7 +2155,8 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		__u8 index;
 		__u8 old_index;
 		l4_off = l3_off + ipv4_hdrlen(ip4);
-
+		
+		cilium_dbg3(ctx, 0, 10, 10, 10);
 		// Modify dest ip
 		ret = ctx_store_bytes(ctx, l3_off + offsetof(struct iphdr, daddr),
 			      &new_daddr, 4, 0);
@@ -2196,7 +2196,7 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		redir_opt = (struct redir_opt_complete *)((void*)tcph + sizeof(struct tcphdr));
 		old_index = redir_opt->index;
 		index = old_index + 1;
-		ret = ctx_store_bytes(ctx, l3_off + sizeof(struct iphdr) + sizeof(struct iphdr) + offsetof(struct redir_opt_complete, index),
+		ret = ctx_store_bytes(ctx, l3_off + sizeof(struct iphdr) + sizeof(struct tcphdr) + offsetof(struct redir_opt_complete, index),
 			      &index, 1, 0);
 		if (ret < 0) return DROP_WRITE_ERROR;
 		if (!revalidate_data(ctx, &data, &data_end, &ip4))
@@ -2209,32 +2209,91 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		send_trace_notify(ctx, TRACE_FROM_NETWORK, 0, 0, 0,
 				  ctx->ingress_ifindex,
 				  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
-		cilium_dbg3(ctx, 0, 30, 30, 30);
+	} 
+	else if (redir_opt->index == 1) { // This is the backend pod
+		__be32 client_ip = redir_opt->ip1;
+		__be16 client_port = redir_opt->port1;
+		__be32 service_ip = redir_opt->ip2;
+		__be16 service_port = redir_opt->port2;
+		__be32 old_ip;
+		__be16 old_port;
+		struct crab4_pair crab_key = {};
+		struct crab4_pair crab_value = {};
+		struct crab4_pair *temp = NULL;
+		__be32 sum_diff;
+		struct csum_offset csum_off = {};
+		l4_off = l3_off + ipv4_hdrlen(ip4);
+
+		cilium_dbg3(ctx, 0, 11, 11, 11);
+		// store service_ip & service_port in crab ebpf map
+		crab_key.addr = client_ip;
+		crab_key.port = client_port;
+		crab_value.addr = service_ip;
+		crab_value.port = service_port;
+		ret = map_update_elem(&LB4_CRAB_MAP, &crab_key, &crab_value, BPF_ANY);
+		if (ret < 0) return DROP_WRITE_ERROR;
+		// read the value from map
+		temp = map_lookup_elem(&LB4_CRAB_MAP, &crab_key);
+		if (temp == NULL) return DROP_INVALID_TC_BUFFER;
+		cilium_dbg3(ctx,DBG_CT_LOOKUP4_1, temp->addr , temp->addr, ((bpf_ntohs(temp->port) << 16) | bpf_ntohs(temp->port)));
+
+		cilium_dbg3(ctx, 0, 12, 12, 12);
+		// write client ip & port to packet
+		old_ip = ip4->saddr;
+		old_port = tcph->source;
+		sum_diff = csum_diff(&old_ip, 4, &client_ip, 4, 0);
+		if (ipv4_csum_update_by_diff(ctx, l3_off, sum_diff) < 0)
+			return DROP_CSUM_L3;
+		ret = ctx_store_bytes(ctx, l3_off + offsetof(struct iphdr, saddr),
+			      &client_ip, 4, 0);
+		if (ret < 0)
+			return DROP_WRITE_ERROR;
+		
+		if (!revalidate_data(ctx, &data, &data_end, &ip4))
+			return DROP_INVALID;
+		tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
+		if ((void*)tcph + sizeof(struct tcphdr) > data_end)
+			return DROP_INVALID;
+
+		if (has_l4_header)
+			csum_l4_offset_and_flags(IPPROTO_TCP, &csum_off);
+		if (csum_l4_replace(ctx, l4_off, &csum_off, old_port, client_port, sizeof(client_port)) < 0)
+			return DROP_CSUM_L4;
+		if (ctx_store_bytes(ctx, l4_off + offsetof(struct tcphdr, source), &client_port, sizeof(client_port), 0) < 0)
+			return DROP_WRITE_ERROR;
+
+		// tcp option temp is set to 0
+		// if (!revalidate_data(ctx, &data, &data_end, &ip4))
+		// 	return DROP_INVALID;
+		// tcph = (void*)ip4 + ipv4_hdrlen(ip4);
+		// if ((void*)tcph + sizeof(struct tcphdr) + sizeof(struct redir_opt_complete) > data_end)
+		// 	return DROP_INVALID;
+
+		// ret = ctx_store_bytes(ctx, l3_off + sizeof(struct iphdr) + offsetof(struct redir_opt_complete, temp),
+		// 	      &zero, 1, 0);
+		// send_trace_notify(ctx, TRACE_FROM_NETWORK, 0, 0, 0,
+		// 		  ctx->ingress_ifindex,
+		// 		  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
 	}
 
 skip_crab:
 	if (!revalidate_data(ctx, &data, &data_end, &ip4))
 		return DROP_INVALID;
 	has_l4_header = ipv4_has_l4_header(ip4);
-	cilium_dbg3(ctx, 0, 29, 29, 29);
 #endif /*ENABLE_CRAB*/
 
-	cilium_dbg3(ctx, 0, 40, 40, 40);
 	ret = lb4_extract_tuple(ctx, ip4, ETH_HLEN, &l4_off, &tuple);
 	if (IS_ERR(ret)) {
 		if (ret == DROP_NO_SERVICE) {
-			cilium_dbg3(ctx, 0, 42, 42, 42);
 			is_svc_proto = false;
 			goto skip_service_lookup;
 		}
 		if (ret == DROP_UNKNOWN_L4) {
-			cilium_dbg3(ctx, 0, 43, 43, 43);
 			ctx_set_xfer(ctx, XFER_PKT_NO_SVC);
 			return CTX_ACT_OK;
 		}
 		return ret;
 	}
-	cilium_dbg3(ctx, 0, 41, 41, 41);
 	lb4_fill_key(&key, &tuple);
 	cilium_dbg3(ctx,DBG_CT_LOOKUP4_1, tuple.saddr , key.address, ((bpf_ntohs(tuple.sport) << 16) | bpf_ntohs(tuple.dport)));
 	svc = lb4_lookup_service(&key, false, false);
@@ -2242,7 +2301,6 @@ skip_crab:
 	cilium_capture_out(ctx);
 	if (svc) {
 		const bool skip_l3_xlate = DSR_ENCAP_MODE == DSR_ENCAP_IPIP;
-		cilium_dbg3(ctx, 0, 44, 44, 44);
 		if (!lb4_src_range_ok(svc, ip4->saddr))
 			return DROP_NOT_IN_SRC_RANGE;
 #if defined(ENABLE_L7_LB)
@@ -2266,25 +2324,20 @@ skip_crab:
 			if (!ret)
 				return NAT_46X64_RECIRC;
 		} else {
-			cilium_dbg3(ctx, 0, 45, 45, 45);
 			ret = lb4_local(get_ct_map4(&tuple), ctx, l3_off, l4_off,
 					&key, &tuple, svc, &ct_state_new,
 					has_l4_header, skip_l3_xlate, &cluster_id,
 					ext_err);
-			cilium_dbg3(ctx, 0, 46, 46, 46);
 		}
 		if (IS_ERR(ret)) {
-			cilium_dbg3(ctx, 0, 47, 47, 47);
 			return ret;
 		}
 #if defined(ENABLE_CRAB)
 		goto crab_handle;
 #endif /*ENABLE_CRAB*/
 		if (!lb4_svc_is_routable(svc)) {
-			cilium_dbg3(ctx, 0, 48, 48, 48);
 			return DROP_IS_CLUSTER_IP;
 		}
-		cilium_dbg3(ctx, 0, 21,21,21);
 	} else {
 skip_service_lookup:
 #ifdef ENABLE_NAT_46X64_GATEWAY
@@ -2412,7 +2465,6 @@ redo:
 		if (ret < 0)
 			return ret;
 	}
-	cilium_dbg3(ctx,0,32,32,32);
 	/* TX request to remote backend: */
 	edt_set_aggregate(ctx, 0);
 	if (nodeport_uses_dsr4(&tuple)) {

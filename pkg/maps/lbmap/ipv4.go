@@ -233,19 +233,18 @@ func (k *Crab4Key) NewValue() bpf.MapValue    { return &Crab4Value{} }
 func (k *Crab4Key) GetKeyPtr() unsafe.Pointer { return unsafe.Pointer(k) }
 func (k *Crab4Key) GetAddress() net.IP        { return k.Address.IP() }
 func (k *Crab4Key) GetPort() uint16           { return k.Port }
-func (k *Crab4Key) ToNetwork()
 func (k *Crab4Key) String() string {
-	return net.JoinHostPort(kHost.Address.String(), fmt.Sprintf("%d", kHost.Port))
+	return net.JoinHostPort(k.Address.String(), fmt.Sprintf("%d", k.Port))
 }
 
-func (k *Crab4Key) ToNetwork() Crab4Key {
+func (k *Crab4Key) ToNetwork() CrabKey {
 	n := *k
 	n.Port = byteorder.HostToNetwork16(n.Port)
 	return &n
 }
 
 // ToHost converts Service4Key to host byte order.
-func (k *Crab4Key) ToHost() Crab4Key {
+func (k *Crab4Key) ToHost() CrabKey {
 	h := *k
 	h.Port = byteorder.NetworkToHost16(h.Port)
 	return &h

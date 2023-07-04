@@ -579,13 +579,10 @@ handle_ipv4(struct __ctx_buff *ctx, __u32 secctx __maybe_unused,
 #endif
 
 #ifdef ENABLE_NODEPORT
-	cilium_dbg3(ctx, 0, 20,20,20);
 	if (!from_host) {
 #if defined(ENABLE_CRAB)
-		cilium_dbg3(ctx, 0,25,25,25);
 		if (!ctx_skip_nodeport(ctx)) {
 			int ret = nodeport_lb4(ctx, secctx, ext_err);
-			cilium_dbg3(ctx, 0, 21,21,21);
 			if (ret == NAT_46X64_RECIRC) {
 				ctx_store_meta(ctx, CB_SRC_LABEL, secctx);
 				ep_tail_call(ctx, CILIUM_CALL_IPV6_FROM_NETDEV);
@@ -605,7 +602,6 @@ handle_ipv4(struct __ctx_buff *ctx, __u32 secctx __maybe_unused,
 #else
 		if (!ctx_skip_nodeport(ctx)) {
 			int ret = nodeport_lb4(ctx, secctx, ext_err);
-			cilium_dbg3(ctx, 0, 21,21,21);
 			if (ret == NAT_46X64_RECIRC) {
 				ctx_store_meta(ctx, CB_SRC_LABEL, secctx);
 				ep_tail_call(ctx, CILIUM_CALL_IPV6_FROM_NETDEV);
@@ -624,7 +620,6 @@ handle_ipv4(struct __ctx_buff *ctx, __u32 secctx __maybe_unused,
 	}
 #endif /* ENABLE_CRAB */
 #endif /* ENABLE_NODEPORT */
-	cilium_dbg3(ctx, 0, 26,26,26);
 #ifdef ENABLE_HOST_FIREWALL
 	if (from_host) {
 		/* We're on the egress path of cilium_host. */

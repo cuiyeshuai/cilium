@@ -401,11 +401,9 @@ static __always_inline int crab_add_tcp_option(struct __ctx_buff *ctx, __u16 ip_
 	int ret = 0;
 
 	if (!revalidate_data(ctx, &data, &data_end, &ip4)) {
-		cilium_dbg3(ctx, 0, 1, 1, 1);
 		return DROP_INVALID;
 	}
 	if ((void*)(tcph + 1) > data_end){
-		cilium_dbg3(ctx, 0, 2, 2, 2);
 		return DROP_INVALID;
 	}
 	// store current tcph into tcph_old
@@ -430,16 +428,13 @@ static __always_inline int crab_add_tcp_option(struct __ctx_buff *ctx, __u16 ip_
 	}
 	// add room between end of ip hdr and start of tcp hdr
 	if (ctx_adjust_hroom(ctx, adjust_len, BPF_ADJ_ROOM_NET, flags)) {
-		cilium_dbg3(ctx, 0, 3, 3, 3);
 		return DROP_INVALID;
 	}
 
 	if (!revalidate_data_pull(ctx, &data, &data_end, &ip4)) {
-		cilium_dbg3(ctx, 0, 4, 4, 4);
 		return DROP_INVALID;
 	}
 	if (data + l3_off + sizeof(struct iphdr) + sizeof(struct tcphdr) + adjust_len > data_end) {
-		cilium_dbg3(ctx, 0, 5, 5, 5);
 		return DROP_INVALID;
 	}
 
@@ -460,7 +455,6 @@ static __always_inline int crab_add_tcp_option(struct __ctx_buff *ctx, __u16 ip_
 	if (ipv4_csum_update_by_diff(ctx, l3_off, diff) < 0)
 		return DROP_CSUM_L3;
 	if (!revalidate_data_pull(ctx, &data, &data_end, &ip4)) {
-		cilium_dbg3(ctx, 0, 4, 4, 4);
 		return DROP_INVALID;
 	}
 
@@ -470,26 +464,29 @@ static __always_inline int crab_add_tcp_option(struct __ctx_buff *ctx, __u16 ip_
 		cilium_dbg3(ctx, 0, 5, 5, 5);
 		return DROP_INVALID;
 	}
+	l4_off = ETH_HLEN + ipv4_hdrlen(ip4);
 
 	// copy tcph_old into new tcph
-	memcpy(tcph, &tcph_old, sizeof(tcph_old));
+	// memcpy(tcph, &tcph_old, sizeof(tcph_old));
+	ctx_store_bytes(ctx, l4_off, &tcph_old, sizeof(tcph_old), BPF_F_RECOMPUTE_CSUM);
 	// fill option field with zero first
-	memset((void *)(tcph+1), 0, adjust_len);
+	{
+		int array[20] = {0};
+		ctx_store_bytes(ctx, l4_off+sizeof(tcph_old), &array, adjust_len, BPF_F_RECOMPUTE_CSUM);
+	}
+	// memset((void *)(tcph+1), 0, adjust_len);
 
 	// update d_off field
 	memcpy((void*)&tcph_buff, &tcph_old, sizeof(tcph_old));
-	l4_off = ETH_HLEN + ipv4_hdrlen(ip4);
 	tcph_buff.doff = tcph_old.doff + adjust_len / 4;
 	ctx_store_bytes(ctx, l4_off, &tcph_buff, sizeof(tcph_buff), BPF_F_RECOMPUTE_CSUM);
 	csum_l4_offset_and_flags(IPPROTO_TCP, &csum_off);
 	diff = csum_diff(&tcph_old, sizeof(tcph_old), &tcph_buff, sizeof(tcph_buff), 0);
 	if (csum_l4_replace(ctx, l4_off, &csum_off, 0, diff,
 				    BPF_F_MARK_MANGLED_0) < 0) {
-		cilium_dbg3(ctx, 0, 7, 7, 7);
 		return DROP_CSUM_L4;
 	}
 	if (!revalidate_data_pull(ctx, &data, &data_end, &ip4)) {
-		cilium_dbg3(ctx, 0, 4, 4, 4);
 		return DROP_INVALID;
 	}
 	tcph = data + sizeof(struct ethhdr) + sizeof(struct iphdr);

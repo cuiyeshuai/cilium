@@ -117,7 +117,7 @@ struct {
 	__uint(pinning, LIBBPF_PIN_BY_NAME);
 	__uint(max_entries, CILIUM_LB_BACKENDS_MAP_MAX_ENTRIES);
 	__uint(map_flags, CONDITIONAL_PREALLOC);
-} LB4_CILIUM_MAP __section_maps_btf;
+} LB4_CRAB_MAP __section_maps_btf;
 #endif
 
 struct {
