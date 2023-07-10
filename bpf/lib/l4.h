@@ -489,7 +489,7 @@ static __always_inline int crab_add_tcp_option(struct __ctx_buff *ctx, __u16 ip_
 	if (!revalidate_data_pull(ctx, &data, &data_end, &ip4)) {
 		return DROP_INVALID;
 	}
-	tcph = data + sizeof(struct ethhdr) + sizeof(struct iphdr);
+	tcph = data + sizeof(struct ethhdr) + ipv4_hdrlen(ip4);
 	if ((void*)tcph + sizeof(struct tcphdr) > data_end) {
 		cilium_dbg3(ctx, 0, 5, 5, 5);
 		return DROP_INVALID;
@@ -500,7 +500,7 @@ static __always_inline int crab_add_tcp_option(struct __ctx_buff *ctx, __u16 ip_
 
 	// write option field
 	ctx_store_bytes(ctx, l4_off + sizeof(struct tcphdr), option, adjust_len, BPF_F_RECOMPUTE_CSUM);
-	diff = csum_diff(NULL, 0, &option, adjust_len, 0);
+	diff = csum_diff(NULL, 0, option, adjust_len, 0);
 	if (csum_l4_replace(ctx, l4_off, &csum_off, 0, diff,
 				    BPF_F_MARK_MANGLED_0) < 0) {
 		cilium_dbg3(ctx, 0, 7, 7, 7);

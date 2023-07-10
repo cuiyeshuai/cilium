@@ -1028,6 +1028,11 @@ err_ct_fill_up:
 	return DROP_CT_CREATE_FAILED;
 }
 
+// #if defined(ENABLE_CRAB)
+// static __always inline int
+// crab_client_receive_update_ct()
+// #endif /* ENABLE_CRAB */
+
 /* The function tries to determine whether the flow identified by the given
  * CT_INGRESS tuple belongs to a NodePort traffic (i.e., outside client => N/S
  * LB => local backend).

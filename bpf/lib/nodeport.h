@@ -2121,7 +2121,7 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 	has_l4_header = ipv4_has_l4_header(ip4);
 
 #if defined(ENABLE_CRAB)
-	if (has_l4_header)
+	if (has_l4_header && ip4->protocol == IPPROTO_TCP)
 		tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
 	else
 		goto skip_crab;
@@ -2145,7 +2145,7 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 	} else goto skip_crab;
 
 	// check index
-	if (redir_opt->index == 0) {
+	if (redir_opt->index == 0) { // LB ingress, redirect to service
 		// write service ip & port to packet
 		__be32 new_daddr = redir_opt->ip2;
 		__be16 old_port;
@@ -2156,7 +2156,6 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		__u8 old_index;
 		l4_off = l3_off + ipv4_hdrlen(ip4);
 		
-		cilium_dbg3(ctx, 0, 10, 10, 10);
 		// Modify dest ip
 		ret = ctx_store_bytes(ctx, l3_off + offsetof(struct iphdr, daddr),
 			      &new_daddr, 4, 0);
@@ -2210,7 +2209,7 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 				  ctx->ingress_ifindex,
 				  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
 	} 
-	else if (redir_opt->index == 1) { // This is the backend pod
+	else if (redir_opt->index == 1) { // This is the backend pod, save service ip & port to map
 		__be32 client_ip = redir_opt->ip1;
 		__be16 client_port = redir_opt->port1;
 		__be32 service_ip = redir_opt->ip2;
@@ -2261,19 +2260,18 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 			return DROP_CSUM_L4;
 		if (ctx_store_bytes(ctx, l4_off + offsetof(struct tcphdr, source), &client_port, sizeof(client_port), 0) < 0)
 			return DROP_WRITE_ERROR;
+	// }
+	// else if (redir_opt->index == 2) { // client receives the SYN ACK
+	// 	__be32 client_ip = redir_opt->ip1;
+	// 	__be16 client_port = redir_opt->port1;
+	// 	__be32 service_ip = redir_opt->ip2;
+	// 	__be16 service_port = redir_opt->port2;
+	// 	struct ct_state *ct_state = {};
+	// 	struct ipv4_ct_tuple *tuple;
 
-		// tcp option temp is set to 0
-		// if (!revalidate_data(ctx, &data, &data_end, &ip4))
-		// 	return DROP_INVALID;
-		// tcph = (void*)ip4 + ipv4_hdrlen(ip4);
-		// if ((void*)tcph + sizeof(struct tcphdr) + sizeof(struct redir_opt_complete) > data_end)
-		// 	return DROP_INVALID;
+	// 	tuple->nexthdr = IPPROTO_TCP;
+	// 	tuple->daddr = 
 
-		// ret = ctx_store_bytes(ctx, l3_off + sizeof(struct iphdr) + offsetof(struct redir_opt_complete, temp),
-		// 	      &zero, 1, 0);
-		// send_trace_notify(ctx, TRACE_FROM_NETWORK, 0, 0, 0,
-		// 		  ctx->ingress_ifindex,
-		// 		  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
 	}
 
 skip_crab:

@@ -252,7 +252,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			parser.cur_offset = 0;
 			parser.rest_len = (__u8)offset - sizeof(struct tcphdr);
 			for (i=0; i < MAX_TCP_OPT_LENGTH; i++){
-				crab_parse_ret = l4_parse_tcp_options(ctx, &parser, REDIR_OPT_TYPE_DOUBLE_ADDR);
+				crab_parse_ret = l4_parse_tcp_options(ctx, &parser, REDIR_OPT_COMPLETE);
 				if (crab_parse_ret)
 					break;
 			}
@@ -266,8 +266,42 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 				client_ip = redir_opt->ip1;
 				service_ip = redir_opt->ip2;
 				cilium_dbg3(ctx, DBG_CRAB1, client_ip, service_ip, 0);
-			// } else { // Server egress, retrieve the option from ebpf map and add it to the packet
-			// 	//TODO
+			} else { // Server egress, retrieve the option from ebpf map and add it to the packet
+				__be32 client_ip = ip4->daddr;
+				__be16 client_port = tcph->dest;
+				struct crab4_pair crab_key = {};
+				struct crab4_pair *temp = NULL;
+				crab_key.addr = client_ip;
+				crab_key.port = client_port;
+				
+				temp = map_lookup_elem(&LB4_CRAB_MAP, &crab_key);
+				if (temp == NULL) goto skip_service_lookup; // normal egress
+				cilium_dbg3(ctx, 0, 25, 25, 0);
+				{
+					struct redir_opt_complete option_value;
+					option_value.type = REDIR_OPT_TYPE_COMPLETE;
+					option_value.size = sizeof(struct redir_opt_complete);
+					option_value.ip1 = ip4->saddr;
+					option_value.ip2 = temp->addr;
+					option_value.port1 = tcph->source;
+					option_value.port2 = temp->port;
+					option_value.index = (__u8)2;
+					option_value.padding = (__u8)0;
+					option_value.temp = (__u16)0;
+					option_value.padding1 = (__u16)0;
+					redir_opt = &option_value;
+					if (!revalidate_data(ctx, &data, &data_end, &ip4)) 
+						return DROP_INVALID;
+					tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
+					if (crab_add_tcp_option(ctx, ip4->tot_len, ip4, tcph, redir_opt, REDIR_OPT_COMPLETE) < 0) {
+						cilium_dbg3(ctx,0,10,10,10);
+						return DROP_INVALID;
+					}
+				}
+				if (!revalidate_data_pull(ctx, &data, &data_end, &ip4)) 
+					return DROP_INVALID;
+				send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
+				TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
 			}
 		}
 		goto skip_service_lookup;
