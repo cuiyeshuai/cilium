@@ -1,0 +1,208 @@
+lb4_local
+ct_lb_lookup4 dir=CT_SERVICE map=CT_MAP_TCP4
+__ct_lookup4 action=ACTION_CREATE
+__ct_lookup
+
+state->backend_id = backend_id;
+state->rev_nat_index = svc->rev_nat_index;
+
+lb4_select_backend_id
+    lb4_lookup_backend_slot(ctx, key, slot)
+        key->backend_slot = slot;
+        __lb4_lookup_backend_slot(key)
+            map_lookup_elem(&LB4_SERVICES_MAP_V2, key);
+
+CILIUM_LB_SERVICE_MAP_MAX_ENTRIES\
+
+CILIUM_CALL_IPV4_CT_EGRESS
+    ct_lookup4
+        else if (dir == CT_EGRESS)
+		    tuple->flags = TUPLE_F_IN;
+        __ct_lookup4
+            __ct_lookup
+
+handle_ipv4_from_lxc(ctx, &dst_sec_identity=0, &ext_err); bpf_lxc 1018  1111 1020!
+
+snat_v4_rev_nat
+SNAT_MAPPING_IPV4
+
+
+tail_nodeport_nat_ingress_ipv4
+    snat_v4_rev_nat
+        snat_v4_rev_nat_handle_mapping
+            snat_v4_track_connection
+        snat_v4_rewrite_ingress
+
+
+{"cpu":"CPU 02:","type":"debug","message":"Successfully mapped addr=192.168.32.2 to identity=7"} //bpf_host 1081
+{"cpu":"CPU 02:","type":"debug","message":"Conntrack lookup 1/2: src=192.168.32.2:43490 dst=192.168.32.5:10250"} //nodeport 2343
+{"cpu":"CPU 02:","type":"debug","message":"Unknown message type=0 arg1=1 arg2=1"}  //svc is null
+{"cpu":"CPU 02:","type":"debug","message":"Unknown message type=0 arg1=21 arg2=21"}  //nodeport 2452
+{"cpu":"CPU 02:","type":"debug","message":"Unknown message type=0 arg1=25 arg2=173"} //nodeport 1968
+{"cpu":"CPU 02:","type":"debug","message":"Unknown message type=0 arg1=25 arg2=173"} 
+{"cpu":"CPU 02:","type":"debug","message":"Unknown message type=0 arg1=34 arg2=34"} //bpf_host 880
+{"cpu":"CPU 02:","type":"debug","message":"Unknown message type=0 arg1=0 arg2=0"} //
+
+
+
+Sending Out:
+$cil_from_container
+    send_trace_notify
+    clean all
+    CILIUM_CALL_IPV4_FROM_LXC
+    $tail_handle_ipv4
+        ext_err=0
+        $__tail_handle_ipv4
+            $__per_packet_lb_svc_xlate_4
+                ipv4_ct_tuple, ct_state, has_l4_header, lb4_service, key, proxy_port, cluster_id=0, l4_off
+                $lb4_extract_tuple (fill nexthdr, daddr, saddr, dport, sport)
+                $lb4_fill_key  (proto=0, addr, dport)
+                svc = lb4_lookup_service(&key, is_defined(ENABLE_NODEPORT)=1, false);
+                    key->scope=0/1,key->backend_slot=0,
+                $lb4_local(get_ct_map4(&tuple)=CT_MAP_TCP4, ctx, ETH_HLEN, l4_off, &key, &tuple, svc, &ct_state_new={}, has_l4_header, false, &cluster_id=0, ext_err);
+                    monitor=0, saddr = tuple->saddr, flags = tuple->flags, lb4_backend, backend_id = 0, new_saddr = 0
+                    $ct_lb_lookup4(map, tuple, ctx, l4_off, has_l4_header, CT_SERVICE, state, &monitor);
+                        tuple->flags = TUPLE_F_SERVICE
+                        $__ct_lookup4(map, tuple, ctx, l4_off, has_l4_header, ACTION_CREATE, dir=CT_SERVICE, ct_state, monitor);
+                            is_tcp=true, tcp_flags={ .value = 0 }, 
+                            $__ct_lookup(map, ctx, tuple, action=ACTION_CREATE, dir=CT_SERVICE, ct_state, is_tcp, tcp_flags, monitor);
+                                entry = map_lookup_elem(map, tuple); //should be null, monitor=128
+                                return CT_NEW
+                            cilium_dbg DBG_CT_VERDICT, 
+                            return CT_NEW
+                        return CT_NEW
+                    backend_id = lb4_select_backend_id(ctx, key, tuple, svc);
+                    backend = lb4_lookup_backend(ctx, backend_id);
+                    state->backend_id = backend_id;
+                    state->rev_nat_index = svc->rev_nat_index;
+                    $ct_create4(map=CT_MAP_TCP4, map_related=NULL, tuple, ctx, CT_SERVICE, state, proxy_redirect=false, from_l7lb=false, ext_err);
+                        ct_entry entry = {};is_tcp=true;tcp_flags seen_flags = { .value = 0 }; seen_flags.value |= TCP_FLAG_SYN;
+                        entry.backend_id = ct_state->backend_id;entry.rev_nat_index = ct_state->rev_nat_index;
+                        $ct_update_timeout
+                        entry.src_sec_id = ct_state->src_sec_id = 0; //0
+                        map_update_elem(map_main, tuple, &entry, 0);
+                        return 0;
+                    goto update_state:
+                    tuple->flags = flags; //zero out, state->rev_nat_index = svc->rev_nat_index; state->addr = backend->address; tuple->daddr = backend->address;
+                    $lb4_xlate
+                    return CTX_ACT_OK;
+                $lb4_ctx_store_state(ctx, &ct_state_new, proxy_port, cluster_id); //state here important
+                call CILIUM_CALL_IPV4_CT_EGRESS
+                    tuple->nexthdr = ip4->protocol; tuple->daddr = ip4->daddr; tuple->saddr = ip4->saddr; map=CT_MAP_TCP4;
+                    $ct_lookup4(map, tuple, ctx, l4_off,	DIR=CT_EGRESS, ct_state={}, &ct_buffer.monitor);
+                        tuple->flags = TUPLE_F_IN;
+                        $ipv4_ct_extract_l4_ports(ctx, off, dir, tuple, &has_l4_header);
+                        $__ct_lookup4 //as above
+                            is_tcp=true, tcp_flags={ .value = 0 }, 
+                            $__ct_lookup(map, ctx, tuple, action=ACTION_CREATE, dir=CT_EGRESS, ct_state, is_tcp, tcp_flags, monitor);
+                                return CT_NEW
+                            ipv4_ct_tuple_reverse(tuple);
+                            cilium_dbg DBG_CT_VERDICT, 
+                        return CT_NEW
+                    CT_TAIL_CALL_BUFFER4 store buffer(state, tuple)
+                $tail_handle_ipv4_cont
+                    dst_sec_identity = 0; ext_err = 0;
+                    $handle_ipv4_from_lxc(ctx, &dst_sec_identity, &ext_err);
+                        ct_state_new->rev_nat_index restored.
+                        $lookup_ip4_remote_endpoint(ip4->daddr, cluster_id);
+                        dst_sec_identity = info->sec_identity;node_id = info->node_id;
+                        tuple, ct_state from buffer
+                        ct_state_new.src_sec_id = SECLABEL;ct_map=CT_MAP_TCP4;
+!!!                     ct_create4(ct_map, ct_related_map=NULL, tuple, ctx, CT_EGRESS, &ct_state_new, proxy_port > 0, from_l7lb, ext_err);
+
+cil_to_netdev
+handle_nat_fwd(ctx, 0);
+handle_nat_fwd_ipv4
+ctx_store_meta(ctx, CB_CLUSTER_ID_EGRESS, 0);
+__handle_nat_fwd_ipv4(ctx, cluster_id, &trace);
+    nodeport_rev_dnat_fwd_ipv4
+    CILIUM_CALL_IPV4_NODEPORT_SNAT_FWD
+    tail_handle_snat_fwd_ipv4
+        nodeport_snat_fwd_ipv4(ctx, cluster_id, &ext_err);
+            ipv4_nat_target target{min, max port}
+            snat_v4_prepare_state(ctx, &target); //return true; target->addr = IPV4_MASQUERADE;
+            snat_v4_nat
+                snat_v4_init_tuple(ip4, NAT_DIR_EGRESS, &tuple)
+                    tuple->nexthdr = ip4->protocol; tuple->daddr = ip4->daddr; tuple->saddr = ip4->saddr; tuple->flags = dir;
+                nexthdr = tuple.nexthdr; tuple.dport = l4hdr.dport; tuple.sport = l4hdr.sport;
+                snat_v4_nat_can_skip(target, &tuple, icmp_echoreply) return false;
+                snat_v4_nat_handle_mapping(ctx, &tuple, &state, &tmp, off, target, ext_err)
+                    map=SNAT_MAPPING_IPV4;*state = __snat_lookup(map, tuple);//should be null
+                    snat_v4_track_connection(ctx, tuple, *state, NAT_DIR_EGRESS, off, target, ext_err);
+                        ct_lookup4(get_ct_map4(&tmp), &tmp=tuple, ctx, off, where=EGRESS, &ct_state={}, &monitor);
+                            return new
+                        ct_create4(get_ct_map4(&tmp), NULL, &tmp, ctx,
+				            where, &ct_state, false, false, ext_err);
+                snat_v4_rewrite_egress(ctx, &tuple, state, off, ipv4_has_l4_header(ip4));
+
+
+Receiving:
+cil_from_netdev
+handle_netdev(ctx, false);
+do_netdev(ctx, proto, from_host=false);
+    identity = 0; ipcache_srcid = 0;
+    identity = resolve_srcid_ipv4(ctx, identity, &ipcache_srcid, from_host);=2
+        info = lookup_ip4_remote_endpoint(ip4->saddr, 0);
+        *sec_identity(ipcache_srcid) = info->sec_identity;
+        srcid_from_ipcache = *sec_identity;
+    ctx_store_meta(ctx, CB_SRC_LABEL, identity=2);
+tail_handle_ipv4(ctx, 0, false)
+    proxy_identity=2;ext_err = 0;ctx_store_meta(ctx, CB_SRC_LABEL, 0);
+    handle_ipv4(ctx, proxy_identity=2, ipcache_srcid=0, from_host=false, &ext_err);
+        nodeport_lb4(ctx, secctx=2, ext_err);
+            svc = lb4_lookup_service(&key, false, false);
+            ctx_set_xfer(ctx, XFER_PKT_NO_SVC); ctx_store_meta(ctx, CB_SRC_LABEL, src_sec_identity);
+            tail_nodeport_nat_ingress_ipv4
+                ipv4_nat_target target{min/max port, from_world=true, addr = IPV4_DIRECT_ROUTING}
+                snat_v4_rev_nat(ctx, &target, NULL);
+                    snat_v4_init_tuple(ip4, NAT_DIR_INGRESS, &tuple)
+                        tuple->nexthdr = ip4->protocol;	tuple->daddr = ip4->daddr; tuple->saddr = ip4->saddr; tuple->flags = NAT_DIR_INGRESS;
+                    ports
+                    snat_v4_rev_nat_handle_mapping(ctx, &tuple, &state={}, off, target, ext_err)
+                        map=SNAT_MAPPING_IPV4 *state = __snat_lookup(map, tuple);(nodeport_addr&port)
+                        snat_v4_track_connection(ctx, tuple, *state, NAT_DIR_INGRESS, off, target, ext_err);
+                            state && state->common.host_local
+                            ct_lookup4(get_ct_map4(&tmp), &tmp, ctx, off, where, &ct_state, &monitor);
+                    snat_v4_rewrite_ingress(ctx, &tuple, state, off) return 0;
+                ctx_skip_nodeport_set
+tail_handle_ipv4(ctx, 0, false)
+    handle_ipv4(ctx, proxy_identity, ipcache_srcid, from_host, &ext_err) //skip
+    tail_handle_ipv4_cont_from_netdev
+        tail_handle_ipv4_cont
+            handle_ipv4_cont //uncertain here
+
+handle_netdev(ctx, true);
+    do_netdev(ctx, proto, from_host=true);
+        identity = src identity;
+        tail_handle_ipv4_from_host
+            ipcache_srcid = 0; 
+            tail_handle_ipv4(ctx, ipcache_srcid=0, true)
+                proxy_identity=src identity;
+                ctx_store_meta(ctx, CB_SRC_LABEL, 0);
+                handle_ipv4//skip
+                tail_handle_ipv4_cont_from_host
+                    tail_handle_ipv4_cont(ctx, true)
+                        ctx_store_meta(ctx, CB_SRC_LABEL, 0);
+                        handle_ipv4_cont(ctx, proxy_identity, from_host, &ext_err);
+                            ipv4_local_delivery(ctx, l3_off, secctx, ip4, ep, METRIC_INGRESS, from_host, false, false, 0);
+                                l3_local_delivery(ctx, seclabel, ep, direction, from_host, hairpin_flow, from_tunnel, cluster_id)
+handle_policy
+    tail_ipv4_ct_ingress_policy_only
+        tuple{proto, daddr, saddr}
+        ct_lookup4(map=CT_MAP_TCP4, tuple, ctx, l4_off, DIR=CT_INGRESS, ct_state={}, &ct_buffer.monitor);
+            tuple->flags = TUPLE_F_OUT; tuple ports
+
+
+
+	
+
+
+
+
+
+                        
+
+
+
+
+

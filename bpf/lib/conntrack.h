@@ -839,7 +839,10 @@ static __always_inline int ct_lookup4(const void *map,
 		/* Can't handle extension headers yet */
 		return DROP_CT_UNKNOWN_PROTO;
 	}
-
+	cilium_dbg3(ctx, DBG_CRAB,0,0,0);
+	cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, tuple->saddr, tuple->daddr,
+		    (bpf_ntohs(tuple->sport) << 16) | bpf_ntohs(tuple->dport));
+	cilium_dbg3(ctx,0, tuple->flags, tuple->nexthdr, 0);
 	return __ct_lookup4(map, tuple, ctx, off, has_l4_header,
 			    action, dir, ct_state, monitor);
 }
@@ -966,6 +969,10 @@ static __always_inline int ct_create4(const void *map_main,
 
 	entry.src_sec_id = ct_state->src_sec_id;
 	err = map_update_elem(map_main, tuple, &entry, 0);
+	cilium_dbg3(ctx, DBG_CRAB,0,0,0);
+	cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, tuple->saddr, tuple->daddr,
+		    (bpf_ntohs(tuple->sport) << 16) | bpf_ntohs(tuple->dport));
+	cilium_dbg3(ctx,0, tuple->flags, tuple->nexthdr, 0);
 	if (unlikely(err < 0))
 		goto err_ct_fill_up;
 

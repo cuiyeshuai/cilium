@@ -88,6 +88,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 	union tcp_flags tcp_flags = { .value = 0 };
 	bool is_tcp_crab = false;
 	bool is_syn_crab = false;
+	bool is_ack_crab = false;
 #endif /* ENABLE_CRAB */
 	struct lb4_key key = {};
 	__u16 proxy_port = 0;
@@ -123,10 +124,11 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			if (l4_load_tcp_flags(ctx, l4_off, &tcp_flags) < 0)
 				return DROP_CT_INVALID_HDR;
 			is_syn_crab = tcp_flags.value & TCP_FLAG_SYN;
+			is_ack_crab = tcp_flags.value & TCP_FLAG_ACK;
 		}
 		// We only handle SYN, SYNACK packets
 		// We don't handle critical services like 'kubernetes'
-		if (is_syn_crab && not_critical_services(&tuple)) {
+		if (is_syn_crab && not_critical_services(&tuple) && !is_ack_crab) {
 			// Add the crab redir option
 
 			struct tcphdr *tcph;
@@ -276,6 +278,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 				
 				temp = map_lookup_elem(&LB4_CRAB_MAP, &crab_key);
 				if (temp == NULL) goto skip_service_lookup; // normal egress
+				map_delete_elem(&LB4_CRAB_MAP, &crab_key);
 				cilium_dbg3(ctx, 0, 25, 25, 0);
 				{
 					struct redir_opt_complete option_value;
@@ -316,7 +319,6 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			return ret;
 	}
 
-
 skip_service_lookup:
 	/* Store state to be picked up on the continuation tail call. */
 	lb4_ctx_store_state(ctx, &ct_state_new, proxy_port, cluster_id);
@@ -324,81 +326,6 @@ skip_service_lookup:
 	return DROP_MISSED_TAIL_CALL;
 }
 #endif /* ENABLE_IPV4 */
-
-
-
-
-
-// #ifdef ENABLE_CRAB
-// 		cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr,
-// 			    bpf_ntohs(tuple.dport));
-// 		is_tcp_crab = tuple.nexthdr == IPPROTO_TCP;
-// 		if (has_l4_header && is_tcp_crab) {
-// 			if (l4_load_tcp_flags(ctx, l4_off, &tcp_flags) < 0)
-// 				return DROP_CT_INVALID_HDR;
-// 			is_syn_crab = tcp_flags.value & TCP_FLAG_SYN;
-// 		}
-
-// 		// Crab only focuses on TCP handshake
-// 		if (is_syn_crab) {
-			
-// 			// Check if the packet has tcp options
-// 			int i = 0;
-// 			int offset; 
-
-// 			tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
-
-// 			if ((void*)tcph + sizeof(struct tcphdr) > data_end)
-// 				return DROP_INVALID;
-
-// 			offset = tcph->doff * 4;
-// 			parser.cur_pos = (__u8 *)(tcph + sizeof(struct tcphdr));
-// 			parser.rest_len = (__u8)offset - sizeof(struct tcphdr);
-// 			for (i=0; i < MAX_TCP_OPT_LENGTH; i++){
-// 				crab_ret = l4_parse_tcp_options(ctx, &parser, REDIR_OPT_TYPE_DOUBLE_ADDR);
-// 				if (crab_ret)
-// 					break;
-// 			}
-// 			if (ret == 1) { // Found option
-// 				redir_opt = (struct redir_opt_double_addr *)parser.cur_pos;
-// 				client_ip = redir_opt->ip1;
-// 				service_ip = redir_opt->ip2;
-// 				cilium_dbg3(ctx, DBG_CRAB1, service_ip, client_ip, 0);
-// 			} else { // Add option
-// 				option_value.type = REDIR_OPT_TYPE_DOUBLE_ADDR;
-// 				option_value.size = sizeof(struct redir_opt_double_addr);
-// 				option_value.ip1 = tuple.saddr;
-// 				option_value.ip2 = tuple.daddr;
-// 				redir_opt = &option_value;
-// 				l4_add_tcp_option(ctx, sizeof(struct iphdr), tcph, redir_opt, REDIR_OPT_DOUBLE_ADDR);
-// 			}
-
-// 			if (not_critical_services(&tuple)) { // Not critical service
-// 				svc = get_crab_service(svc);     // SVC of crab LB
-// 				if (!svc || unlikely(svc->count == 0))
-// 					return DROP_NO_SERVICE;
-// 				ret = crab_rewrite_egress_client(ctx, svc, &tuple, ETH_HLEN, l4_off, has_l4_header); // Rewrite dst IP to crab LB SVC IP
-// 				if(IS_ERR(ret)) {
-// 					return ret;
-// 				}
-// 				if (!revalidate_data(ctx, &data, &data_end, &ip4)) 
-// 					return DROP_INVALID;
-// 				ret = lb4_extract_tuple(ctx, ip4, ETH_HLEN, &l4_off, &tuple);
-// 				if (IS_ERR(ret)) {
-// 					if (ret == DROP_NO_SERVICE || ret == DROP_UNKNOWN_L4)
-// 						goto skip_service_lookup;
-// 					else
-// 						return ret;
-// 				}
-// 				lb4_fill_key(&key, &tuple);
-// 				cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr,
-// 						bpf_ntohs(tuple.dport));
-// 			}
-// 		}
-	
-// // skip_crab:
-// #endif /* ENABLE_CRAB */
-
 
 
 
@@ -484,6 +411,10 @@ select_ct_map4(struct __ctx_buff *ctx __maybe_unused, int dir __maybe_unused,
 }
 #endif
 
+// TAIL_CT_LOOKUP4(CILIUM_CALL_IPV4_CT_INGRESS_POLICY_ONLY,
+// 		tail_ipv4_ct_ingress_policy_only, CT_INGRESS,
+// 		__and(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6)),
+// 		CILIUM_CALL_IPV4_TO_LXC_POLICY_ONLY, tail_ipv4_policy)
 // TAIL_CT_LOOKUP4(CILIUM_CALL_IPV4_CT_EGRESS, tail_ipv4_ct_egress, CT_EGRESS,
 // 		is_defined(ENABLE_PER_PACKET_LB),
 // 		CILIUM_CALL_IPV4_FROM_LXC_CONT, tail_handle_ipv4_cont)
@@ -1118,7 +1049,6 @@ static __always_inline int handle_ipv4_from_lxc(struct __ctx_buff *ctx, __u32 *d
 	ret = ct_buffer->ret;
 	ct_status = (enum ct_status)ret;
 	trace.reason = (enum trace_reason)ret;
-
 #if defined(ENABLE_L7_LB)
 	if (proxy_port > 0) {
 		/* tuple addresses have been swapped by CT lookup */
@@ -1167,7 +1097,6 @@ static __always_inline int handle_ipv4_from_lxc(struct __ctx_buff *ctx, __u32 *d
 
 	if (verdict != CTX_ACT_OK)
 		return verdict;
-
 skip_policy_enforcement:
 #if defined(ENABLE_L7_LB)
 	from_l7lb = ctx_load_meta(ctx, CB_FROM_HOST) == FROM_HOST_L7_LB;
@@ -1433,7 +1362,6 @@ skip_vtep:
 #endif /* TUNNEL_MODE */
 	if (is_defined(ENABLE_HOST_ROUTING)) {
 		int oif = 0;
-
 		ret = fib_redirect_v4(ctx, ETH_HLEN, ip4, false, ext_err,
 				      ctx_get_ifindex(ctx), &oif);
 		if (fib_ok(ret))

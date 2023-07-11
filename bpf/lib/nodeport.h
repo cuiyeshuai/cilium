@@ -1965,12 +1965,14 @@ int tail_nodeport_nat_ingress_ipv4(struct __ctx_buff *ctx)
 
 	/* ext_err is NULL because errors don't survive the tailcall anyway. */
 	ret = snat_v4_rev_nat(ctx, &target, NULL);
+	cilium_dbg3(ctx, 0, 25, ret < 0 ? -ret : ret, 25);
 	if (IS_ERR(ret)) {
 		/* In case of no mapping, recircle back to main path. SNAT is very
 		 * expensive in terms of instructions (since we don't have BPF to
 		 * BPF calls as we use tail calls) and complexity, hence this is
 		 * done inside a tail call here.
 		 */
+		cilium_dbg3(ctx, 0, 25, ret < 0 ? -ret : ret, 25);
 		ctx_skip_nodeport_set(ctx);
 		ep_tail_call(ctx, CILIUM_CALL_IPV4_FROM_NETDEV);
 		ret = DROP_MISSED_TAIL_CALL;
@@ -2260,18 +2262,64 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 			return DROP_CSUM_L4;
 		if (ctx_store_bytes(ctx, l4_off + offsetof(struct tcphdr, source), &client_port, sizeof(client_port), 0) < 0)
 			return DROP_WRITE_ERROR;
-	// }
-	// else if (redir_opt->index == 2) { // client receives the SYN ACK
-	// 	__be32 client_ip = redir_opt->ip1;
-	// 	__be16 client_port = redir_opt->port1;
-	// 	__be32 service_ip = redir_opt->ip2;
-	// 	__be16 service_port = redir_opt->port2;
-	// 	struct ct_state *ct_state = {};
-	// 	struct ipv4_ct_tuple *tuple;
+	}
+	else if (redir_opt->index == 2) { // client receives the SYN ACK
+		__be32 backend_ip = redir_opt->ip1;
+		__be16 backend_port = redir_opt->port1;
+		__be32 service_ip = redir_opt->ip2;
+		__be16 service_port = redir_opt->port2;
+		struct ct_state state = {};
+		struct lb4_key crab_key = {};
+		struct ipv4_ct_tuple crab_tuple = {};
+		struct lb4_service *backend_svc;
+		struct lb4_service *be;
+		struct lb4_backend *backend;
+		struct remote_endpoint_info *info;
+		__u16 loop_num;
+		__u16 slot = 1;
+		__u32 backend_id = 0;
 
-	// 	tuple->nexthdr = IPPROTO_TCP;
-	// 	tuple->daddr = 
+		// Service conntrack
+		tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
+		if ((void*)tcph + sizeof(struct tcphdr) > data_end)
+			return DROP_INVALID;
+		crab_tuple.nexthdr = IPPROTO_TCP;
+		crab_tuple.daddr = service_ip;
+		crab_tuple.saddr = ip4->daddr;
+		crab_tuple.dport = tcph->dest; // Extra care, Cilium handle tuple port differently
+		crab_tuple.sport = service_port;
+		crab_tuple.flags = TUPLE_F_SERVICE;
+		lb4_fill_key(&crab_key, &crab_tuple);
+		backend_svc = lb4_lookup_service(&crab_key, is_defined(ENABLE_NODEPORT), false);
+		if (backend_svc == NULL) return DROP_INVALID;
+		loop_num = backend_svc->count;
+		for (slot = 1; slot <= 20; slot++) { // loop through all the backends to see if there is a match, verifier complains if number is too large
+			be = lb4_lookup_backend_slot(ctx, &crab_key, slot);
+			if (be != NULL) {
+				backend_id = be->backend_id;
+				backend = lb4_lookup_backend(ctx, backend_id);
+				if (backend == NULL) return DROP_NO_SERVICE;
+				if ((backend->address == backend_ip && backend->port == backend_port) || slot > loop_num) break;
+			}
+		}
+		if (backend_id == 0) return DROP_INVALID; // No match
+		state.backend_id = backend_id;
+		state.rev_nat_index = backend_svc->rev_nat_index;
+		ret = ct_create4(&CT_MAP_TCP4, NULL, &crab_tuple, ctx, CT_SERVICE, &state, false, false, NULL);
+		if (IS_ERR(ret))
+			// goto drop_err;
+			return DROP_NO_SERVICE;
 
+		// Backend conntrack
+		crab_tuple.daddr = backend_ip;
+		crab_tuple.sport = backend_port;
+		crab_tuple.flags = TUPLE_F_IN;
+		ipv4_ct_tuple_reverse(&crab_tuple);
+		info = lookup_ip4_remote_endpoint(ip4->daddr, cluster_id);
+		if (info && info->sec_identity) 
+			state.src_sec_id = info->sec_identity;
+		ret = ct_create4(&CT_MAP_TCP4, NULL, &crab_tuple, ctx, CT_EGRESS, &state, false, false, NULL);
+		goto skip_service_lookup;
 	}
 
 skip_crab:
@@ -2383,6 +2431,7 @@ skip_service_lookup:
 #endif /* ENABLE_DSR */
 
 		ctx_store_meta(ctx, CB_SRC_LABEL, src_sec_identity);
+		cilium_dbg3(ctx, 0, CB_SRC_LABEL,CB_SRC_LABEL,CB_SRC_LABEL);
 		/* For NAT64 we might see an IPv4 reply from the backend to
 		 * the LB entering this path. Thus, transform back to IPv6.
 		 */
@@ -2402,6 +2451,7 @@ skip_service_lookup:
 			ep_tail_call(ctx, CILIUM_CALL_IPV6_NODEPORT_NAT_INGRESS);
 #endif
 		} else {
+			cilium_dbg3(ctx,0,21,21,21);
 			ep_tail_call(ctx, CILIUM_CALL_IPV4_NODEPORT_NAT_INGRESS);
 		}
 		return DROP_MISSED_TAIL_CALL;

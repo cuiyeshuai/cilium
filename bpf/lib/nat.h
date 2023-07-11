@@ -22,6 +22,7 @@
 #include "icmp6.h"
 #include "nat_46x64.h"
 #include "stubs.h"
+#include "trace.h"
 
 enum  nat_dir {
 	NAT_DIR_EGRESS  = TUPLE_F_OUT,
@@ -316,8 +317,9 @@ static __always_inline int snat_v4_track_connection(struct __ctx_buff *ctx,
 	__u32 monitor = 0;
 	enum ct_dir where;
 	int ret;
-
+	cilium_dbg3(ctx, 0, 27,27,27);
 	if (state && state->common.host_local) {
+		cilium_dbg3(ctx, 0, 49,49,49);
 		needs_ct = true;
 #if defined(ENABLE_EGRESS_GATEWAY)
 	/* Track egress gateway connections, but only if they are related to a
@@ -329,21 +331,24 @@ static __always_inline int snat_v4_track_connection(struct __ctx_buff *ctx,
 		needs_ct = true;
 #endif
 	} else if (!state && dir == NAT_DIR_EGRESS && tuple->saddr == target->addr) {
+		cilium_dbg3(ctx, 0, 50,50,50);
 		needs_ct = true;
 	}
-	if (!needs_ct)
+	if (!needs_ct) {
+		cilium_dbg3(ctx, 0, 28,28,28);
 		return 0;
-
+	}
 	memset(&ct_state, 0, sizeof(ct_state));
 	memcpy(&tmp, tuple, sizeof(tmp));
 
-	where = dir == NAT_DIR_INGRESS ? CT_INGRESS : CT_EGRESS;
-
+	where = dir == NAT_DIR_INGRESS ? CT_INGRESS : CT_EGRESS;	
+	cilium_dbg3(ctx, 0, 29,29,29);
 	ret = ct_lookup4(get_ct_map4(&tmp), &tmp, ctx, off, where,
 			 &ct_state, &monitor);
 	if (ret < 0) {
 		return ret;
 	} else if (ret == CT_NEW) {
+		cilium_dbg3(ctx, 0, 30,30,30);
 		ret = ct_create4(get_ct_map4(&tmp), NULL, &tmp, ctx,
 				 where, &ct_state, false, false, ext_err);
 		if (IS_ERR(ret))
@@ -395,15 +400,32 @@ snat_v4_rev_nat_handle_mapping(struct __ctx_buff *ctx,
 		return DROP_SNAT_NO_MAP_FOUND;
 
 	*state = __snat_lookup(map, tuple);
+	if (state != NULL && *state != NULL) 
+    	cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, (*state)->to_daddr, (*state)->to_daddr,
+                (bpf_ntohs((*state)->to_dport) << 16) | bpf_ntohs((*state)->to_dport));
+	cilium_dbg3(ctx, 0, state==NULL, 26, 26);
+	cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, 0, 0,
+		    (bpf_ntohs(tuple->dport) << 16) | bpf_ntohs(tuple->dport));
 	ret = snat_v4_track_connection(ctx, tuple, *state, NAT_DIR_INGRESS, off, target, ext_err);
-	if (ret < 0)
+	cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, 0, 0,
+		    (bpf_ntohs(tuple->dport) << 16) | bpf_ntohs(tuple->dport));
+	cilium_dbg3(ctx, 0, ret<0 ? -ret : ret, 0, 0);
+	if (ret < 0) {
+		cilium_dbg3(ctx, 0, 41,41,41);
 		return ret;
-	else if (*state)
+	}
+	else if (*state) {
+		cilium_dbg3(ctx, 0, 42,42,42);
 		return NAT_CONTINUE_XLATE;
-	else
+	}
+	else {
+		cilium_dbg3(ctx, 0, 43,43,43);
+		cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, 0, 0,
+		    (bpf_ntohs(target->min_port) << 16) | bpf_ntohs(target->min_port));
 		return tuple->nexthdr != IPPROTO_ICMP &&
 		       bpf_ntohs(tuple->dport) < target->min_port ?
 		       NAT_PUNT_TO_STACK : DROP_NAT_NO_MAPPING;
+	}
 }
 
 static __always_inline int
@@ -553,8 +575,10 @@ static __always_inline int snat_v4_rewrite_egress(struct __ctx_buff *ctx,
 	__be32 sum_l4 = 0, sum;
 
 	if (state->to_saddr == tuple->saddr &&
-	    state->to_sport == tuple->sport)
+	    state->to_sport == tuple->sport) {
+		cilium_dbg3(ctx, 0, 31,31,31);
 		return 0;
+	}
 	sum = csum_diff(&tuple->saddr, 4, &state->to_saddr, 4, 0);
 	if (has_l4_header) {
 		csum_l4_offset_and_flags(tuple->nexthdr, &csum);
@@ -614,8 +638,13 @@ static __always_inline int snat_v4_rewrite_ingress(struct __ctx_buff *ctx,
 	__be32 sum_l4 = 0, sum;
 
 	if (state->to_daddr == tuple->daddr &&
-	    state->to_dport == tuple->dport)
+	    state->to_dport == tuple->dport) {
+		cilium_dbg3(ctx, 0, 31,31,31);
 		return 0;
+	}
+	cilium_dbg3(ctx, 0, 32,32,32);
+	send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
+			  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
 	sum = csum_diff(&tuple->daddr, 4, &state->to_daddr, 4, 0);
 	csum_l4_offset_and_flags(tuple->nexthdr, &csum);
 	if (state->to_dport != tuple->dport) {
@@ -666,6 +695,8 @@ static __always_inline int snat_v4_rewrite_ingress(struct __ctx_buff *ctx,
 	if (csum.offset &&
 	    csum_l4_replace(ctx, off, &csum, 0, sum, flags) < 0)
 		return DROP_CSUM_L4;
+	send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
+			  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
 	return 0;
 }
 
@@ -1066,6 +1097,7 @@ snat_v4_nat(struct __ctx_buff *ctx, const struct ipv4_nat_target *target, __s8 *
 		return ret;
 
 rewrite_egress:
+	cilium_dbg3(ctx, 0, 30, 30, 30);
 	return snat_v4_rewrite_egress(ctx, &tuple, state, off, ipv4_has_l4_header(ip4));
 }
 
@@ -1200,16 +1232,21 @@ snat_v4_rev_nat(struct __ctx_buff *ctx, const struct ipv4_nat_target *target, __
 	default:
 		return NAT_PUNT_TO_STACK;
 	};
-
+	
 	if (snat_v4_rev_nat_can_skip(target, &tuple))
 		return NAT_PUNT_TO_STACK;
+	cilium_dbg3(ctx, 0, 23, 23, 23);
 	ret = snat_v4_rev_nat_handle_mapping(ctx, &tuple, &state, off, target, ext_err);
-	if (ret > 0)
+	if (ret > 0) {
+		cilium_dbg3(ctx, 0, 43, 43, 43);
 		return CTX_ACT_OK;
-	if (ret < 0)
+	}
+	if (ret < 0) {
+		cilium_dbg3(ctx, 0, 44, 44, 44);
 		return ret;
-
+	}
 rewrite_ingress:
+	cilium_dbg3(ctx, 0, 40, 40, 40);
 	return snat_v4_rewrite_ingress(ctx, &tuple, state, off);
 }
 #else

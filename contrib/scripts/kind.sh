@@ -5,7 +5,7 @@
 set -euo pipefail
 
 default_controlplanes=1
-default_workers=3
+default_workers=4
 default_cluster_name=""
 default_image=""
 default_kubeproxy_mode="iptables"
@@ -146,9 +146,9 @@ kubeadmConfigPatches:
         "v": "3"
 EOF
 
-for node in $(kind get nodes); do
-  docker exec "${node}" bash -c "ethtool -K eth0 tx off rx off"
-done
+# for node in $(kind get nodes); do
+#   docker exec "${node}" bash -c "ethtool -K eth0 tx off rx off"
+# done
 
 if [ "${xdp}" = true ]; then
   if ! [ -f "${CILIUM_ROOT}/test/l4lb/bpf_xdp_veth_host.o" ]; then
