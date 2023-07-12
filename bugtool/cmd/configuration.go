@@ -187,6 +187,7 @@ func defaultCommands(confDir string, cmdDir string, k8sPods []string) []string {
 			fmt.Sprintf("bpftool map dump pinned %s/tc/globals/cilium_snat_v6_external", bpffsMountpoint),
 			fmt.Sprintf("bpftool map dump pinned %s/tc/globals/cilium_vtep_map", bpffsMountpoint),
 			fmt.Sprintf("bpftool map dump pinned %s/tc/globals/cilium_lb4_crab", bpffsMountpoint),
+			fmt.Sprintf("bpftool map dump pinned %s/tc/globals/cilium_lb4_crab_long", bpffsMountpoint),
 		}...)
 	}
 
@@ -396,6 +397,7 @@ func copyCiliumInfoCommands(cmdDir string, k8sPods []string) []string {
 		"cilium map events cilium_tunnel_map -o json",
 		"cilium map events cilium_lb4_services_v2 -o json",
 		"cilium map events cilium_lb4_crab -o json",
+		"cilium map events cilium_lb4_cran_long -o json",
 		"cilium map events cilium_lb4_backends_v2 -o json",
 		"cilium map events cilium_lxc -o json",
 		"cilium service list",

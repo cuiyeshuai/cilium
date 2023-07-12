@@ -33,7 +33,6 @@ kubeProxyReplacement: strict
 ipv4NativeRoutingCIDR: 10.0.0.0/24
 routing-mode: native
 autoDirectNodeRoutes: true
-enable-ipv4-masquerade: false
 tunnel: disabled
 crab:
   enabled: true

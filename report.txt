@@ -1,0 +1,37 @@
+Client out SYN
+10.244.4.72:58030(client pod) to 10.96.0.101:80(backend service)
+10.244.4.72:58030(client pod) to 10.96.0.100:80(LB service)
+10.244.4.72:58030(client pod) to 10.244.3.203:80 (LB pod)
+192.168.224.4:58030(client Node) 10.244.3.203:80 (LB pod)    !!!masquerade!!!
+
+Backend Receive SYN
+192.168.224.3:58030(LB Node) 10.244.2.85:80 (backend pod)    !!!masquerade!!!
+10.244.4.72:58030(client pod) dst=10.244.2.85:80 (backend pod) 
+
+Backend Out SYN ACK
+10.244.2.85:80(backend pod) 10.244.4.72:58030(client pod)
+
+Client Receive SYN ACK
+10.96.0.101:80(backend service) 10.244.4.72:58030
+
+Client Out ACK
+10.244.4.72:58030(client pod) to 10.96.0.101:80(backend service)
+10.244.4.72:58030(client pod) to 10.244.2.85:80(backend pod)
+192.168.224.4:58030(client Node) to 10.244.2.85:80(backend pod)
+
+
+
+
+
+
+ip1 client pod ip
+ip2 service ip
+ip3 client node masquerade ip
+port1 client pod port
+port2 service port
+
+client egress index 0
+lb ingress 0->1
+lb egress 1->2
+backend ingress 3
+backend egress 4

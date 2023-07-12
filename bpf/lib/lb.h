@@ -118,6 +118,14 @@ struct {
 	__uint(max_entries, CILIUM_LB_BACKENDS_MAP_MAX_ENTRIES);
 	__uint(map_flags, CONDITIONAL_PREALLOC);
 } LB4_CRAB_MAP __section_maps_btf;
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__type(key, struct crab4_pair);
+	__type(value, struct crab4_pair_long);
+	__uint(pinning, LIBBPF_PIN_BY_NAME);
+	__uint(max_entries, CILIUM_LB_BACKENDS_MAP_MAX_ENTRIES);
+	__uint(map_flags, CONDITIONAL_PREALLOC);
+} LB4_CRAB_MAP_LONG __section_maps_btf;
 #endif
 
 struct {

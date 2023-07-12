@@ -209,6 +209,22 @@ type CrabValue interface {
 	GetServicePort() uint16
 }
 
+type CrabValueLong interface {
+	bpf.MapValue
+
+	// ToNetwork converts fields to network byte order.
+	ToNetwork() CrabValueLong
+
+	// ToHost converts fields to host byte order.
+	ToHost() CrabValueLong
+
+	// Get service ip address
+	GetServiceIP() net.IP
+
+	// Get service port
+	GetServicePort() uint16
+}
+
 func svcFrontend(svcKey ServiceKey, svcValue ServiceValue) *loadbalancer.L3n4AddrID {
 	feIP := svcKey.GetAddress()
 	feAddrCluster := cmtypes.MustAddrClusterFromIP(feIP)

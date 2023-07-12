@@ -193,6 +193,79 @@ handle_policy
             tuple->flags = TUPLE_F_OUT; tuple ports
 
 
+#ifdef ENABLE_CRAB
+	{
+		void *data, *data_end;
+		struct iphdr *ip4;
+		bool has_l4_header;
+		int l4_off;
+		struct ipv4_ct_tuple tuple = {};
+		int i = 0;
+		int offset;
+		struct opt_parser parser = {};
+		int crab_parse_ret;
+		struct tcphdr *tcph;
+		struct redir_opt_complete *redir_opt;
+
+		if (!revalidate_data(ctx, &data, &data_end, &ip4))
+			goto skip_crab;
+		has_l4_header = ipv4_has_l4_header(ip4);
+		ret = lb4_extract_tuple(ctx, ip4, ETH_HLEN, &l4_off, &tuple);
+		if (IS_ERR(ret)) goto skip_crab;
+		if (has_l4_header && ip4->protocol == IPPROTO_TCP)
+			tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
+		else
+			goto skip_crab;
+		if ((void*)tcph + sizeof(struct tcphdr) > data_end)
+			goto skip_crab;
+		offset = tcph->doff * 4;
+		parser.cur_pos = (__u8 *)(tcph + 1);
+		parser.cur_offset = 0;
+		parser.rest_len = (__u8)offset - sizeof(struct tcphdr);
+		for (i=0; i < MAX_TCP_OPT_LENGTH; i++){
+			crab_parse_ret = l4_parse_tcp_options(ctx, &parser, REDIR_OPT_TYPE_COMPLETE);
+			if (crab_parse_ret)
+				break;
+		}
+		if (crab_parse_ret == 1) { // Found option, LB egress, nothing special to do
+			redir_opt = (struct redir_opt_complete *)parser.cur_pos;
+			if ((void*)redir_opt + sizeof(struct redir_opt_complete) > data_end)
+				goto skip_crab;
+		} else goto skip_crab;
+		if (redir_opt->index == 0) {
+			// struct redir_opt_complete option_value={};
+			int l3_off = ETH_HLEN;
+			__be16 client_node_port;
+			// __be32 client_pod_ip = redir_opt->ip1;
+			// __be16 client_pod_port = redir_opt->port1;
+
+			// option_value = *redir_opt;
+			// option_value.ip1 = tuple.saddr;
+			// option_value.port1 = tcph->source;
+			if (!revalidate_data(ctx, &data, &data_end, &ip4)) 
+				return DROP_INVALID;
+			tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
+			if ((void*)tcph + sizeof(struct tcphdr) + sizeof(struct redir_opt_complete) > data_end)
+			return DROP_INVALID;
+
+			ret = ctx_store_bytes(ctx, l3_off + ipv4_hdrlen(ip4) + sizeof(struct tcphdr) + offsetof(struct redir_opt_complete, ip1), 
+				&tuple.saddr, 4, 0);
+			if (ret < 0) return DROP_WRITE_ERROR;
+			if (!revalidate_data(ctx, &data, &data_end, &ip4))
+				return DROP_INVALID;
+			tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
+			if ((void*)tcph + sizeof(struct tcphdr) + sizeof(struct redir_opt_complete) > data_end)
+			return DROP_INVALID;
+
+			client_node_port = tcph->source;
+			ret = ctx_store_bytes(ctx, l3_off + ipv4_hdrlen(ip4) + sizeof(struct tcphdr) + offsetof(struct redir_opt_complete, port1), 
+				&client_node_port, 2, 0);
+			if (ret < 0) return DROP_WRITE_ERROR;
+		}
+		send_trace_notify(ctx, TRACE_TO_NETWORK, 0, 0, 0, 0, TRACE_REASON_UNKNOWN, 0);
+	}
+skip_crab:
+#endif
 
 	
 

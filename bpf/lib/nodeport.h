@@ -1375,7 +1375,131 @@ static __always_inline int nodeport_snat_fwd_ipv4(struct __ctx_buff *ctx,
 		ret = snat_v4_nat(ctx, &target, ext_err);
 	if (ret == NAT_PUNT_TO_STACK)
 		ret = CTX_ACT_OK;
+#ifdef ENABLE_CRAB
+	{
+		void *data, *data_end;
+		struct iphdr *ip4;
+		bool has_l4_header;
+		int l4_off;
+		struct ipv4_ct_tuple tuple = {};
+		int i = 0;
+		int offset;
+		struct opt_parser parser = {};
+		int crab_parse_ret;
+		struct tcphdr *tcph;
+		struct redir_opt_complete *redir_opt;
 
+		if (!revalidate_data(ctx, &data, &data_end, &ip4))
+			goto skip_crab;
+		has_l4_header = ipv4_has_l4_header(ip4);
+		ret = lb4_extract_tuple(ctx, ip4, ETH_HLEN, &l4_off, &tuple);
+		if (IS_ERR(ret)) goto skip_crab;
+		if (has_l4_header && ip4->protocol == IPPROTO_TCP)
+			tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
+		else
+			goto skip_crab;
+		if ((void*)tcph + sizeof(struct tcphdr) > data_end)
+			goto skip_crab;
+		offset = tcph->doff * 4;
+		parser.cur_pos = (__u8 *)(tcph + 1);
+		parser.cur_offset = 0;
+		parser.rest_len = (__u8)offset - sizeof(struct tcphdr);
+		for (i=0; i < MAX_TCP_OPT_LENGTH; i++){
+			crab_parse_ret = l4_parse_tcp_options(ctx, &parser, REDIR_OPT_TYPE_COMPLETE);
+			if (crab_parse_ret)
+				break;
+		}
+		if (crab_parse_ret == 1) { // Found option,
+			redir_opt = (struct redir_opt_complete *)parser.cur_pos;
+			if ((void*)redir_opt + sizeof(struct redir_opt_complete) > data_end)
+				goto skip_crab;
+		} else goto skip_crab;
+		// if (redir_opt->index == 0) {
+		// 	// struct redir_opt_complete option_value={};
+		// 	int l3_off = ETH_HLEN;
+		// 	__be16 client_node_port;
+		// 	// __be32 client_pod_ip = redir_opt->ip1;
+		// 	// __be16 client_pod_port = redir_opt->port1;
+
+		// 	// option_value = *redir_opt;
+		// 	// option_value.ip1 = tuple.saddr;
+		// 	// option_value.port1 = tcph->source;
+		// 	if (!revalidate_data(ctx, &data, &data_end, &ip4)) 
+		// 		return DROP_INVALID;
+		// 	tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
+		// 	if ((void*)tcph + sizeof(struct tcphdr) + sizeof(struct redir_opt_complete) > data_end)
+		// 	return DROP_INVALID;
+
+		// 	ret = ctx_store_bytes(ctx, l3_off + ipv4_hdrlen(ip4) + sizeof(struct tcphdr) + offsetof(struct redir_opt_complete, ip1), 
+		// 		&tuple.saddr, 4, 0);
+		// 	if (ret < 0) return DROP_WRITE_ERROR;
+		// 	if (!revalidate_data(ctx, &data, &data_end, &ip4))
+		// 		return DROP_INVALID;
+		// 	tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
+		// 	if ((void*)tcph + sizeof(struct tcphdr) + sizeof(struct redir_opt_complete) > data_end)
+		// 	return DROP_INVALID;
+
+		// 	client_node_port = tcph->source;
+		// 	ret = ctx_store_bytes(ctx, l3_off + ipv4_hdrlen(ip4) + sizeof(struct tcphdr) + offsetof(struct redir_opt_complete, port1), 
+		// 		&client_node_port, 2, 0);
+		// 	if (ret < 0) return DROP_WRITE_ERROR;
+		// }
+
+		if (redir_opt->index == 0) { // client egress, put masquerade ip to ip3
+			__be32 masquerade_ip;
+			__be32 client_ip;
+
+			client_ip = redir_opt->ip1;
+			if (!revalidate_data(ctx, &data, &data_end, &ip4))
+				return DROP_INVALID;
+			masquerade_ip = ip4->saddr;
+			ret = ctx_store_bytes(ctx, ETH_HLEN + ipv4_hdrlen(ip4) + sizeof(struct tcphdr) + offsetof(struct redir_opt_complete, ip3), 
+				&masquerade_ip, 4, 0);
+			if (ret < 0) return DROP_WRITE_ERROR;
+			send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
+			  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
+			cilium_dbg3(ctx, 0,50,50,50);
+			cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, masquerade_ip, masquerade_ip,
+		    	(bpf_ntohs(0) << 16) | bpf_ntohs(0));
+			
+			// set src ip to client pod ip
+			// if (!revalidate_data(ctx, &data, &data_end, &ip4))
+			// 	return DROP_INVALID;
+			// ret = ctx_store_bytes(ctx, ETH_HLEN + offsetof(struct iphdr, saddr), 
+			// 	&client_ip, 4, 0);
+			// if (ret < 0) return DROP_WRITE_ERROR;
+
+			// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, redir_opt->ip1, redir_opt->ip3,
+		    // 	(bpf_ntohs(redir_opt->port2) << 16) | bpf_ntohs(redir_opt->port1));
+			//rewrite src port
+		}
+		// else if (redir_opt->index == 1) { //LB egress rewrite src addr to be client masqurade addr
+		// 	__be32 client_masq_ip = redir_opt->ip3;
+		// 	__be16 client_masq_port = redir_opt->port1;
+		// 	int diff;
+			
+		// 	//rewrite src addr
+		// 	if (!revalidate_data(ctx, &data, &data_end, &ip4))
+		// 		return DROP_INVALID;
+		// 	ret = ctx_store_bytes(ctx, ETH_HLEN + offsetof(struct iphdr, saddr), &client_masq_ip, 4, 0);
+		// 	if (ret < 0) return DROP_WRITE_ERROR;
+		// 	//rewrite src port
+		// 	if (!revalidate_data(ctx, &data, &data_end, &ip4))
+		// 		return DROP_INVALID;
+		// 	ret = ctx_store_bytes(ctx, ETH_HLEN + ipv4_hdrlen(ip4) + offsetof(struct tcphdr, source), &client_masq_port, 2, 0);
+		// 	if (ret < 0) return DROP_WRITE_ERROR;
+		// 	cilium_dbg3(ctx, 0,50,50,50);
+		// 	if (!revalidate_data(ctx, &data, &data_end, &ip4))
+		// 		return DROP_INVALID;
+		// 	ip4->check = 0;
+		// 	diff = csum_diff(NULL, 0, ip4, sizeof(struct iphdr), 0);
+		// 	if (ipv4_csum_update_by_diff(ctx, ETH_HLEN, diff) < 0)
+		// 		return DROP_CSUM_L3;
+		// }
+		send_trace_notify(ctx, TRACE_TO_NETWORK, 0, 0, 0, 0, TRACE_REASON_UNKNOWN, 0);
+	}
+skip_crab:
+#endif
 	return ret;
 }
 
@@ -1965,14 +2089,12 @@ int tail_nodeport_nat_ingress_ipv4(struct __ctx_buff *ctx)
 
 	/* ext_err is NULL because errors don't survive the tailcall anyway. */
 	ret = snat_v4_rev_nat(ctx, &target, NULL);
-	cilium_dbg3(ctx, 0, 25, ret < 0 ? -ret : ret, 25);
 	if (IS_ERR(ret)) {
 		/* In case of no mapping, recircle back to main path. SNAT is very
 		 * expensive in terms of instructions (since we don't have BPF to
 		 * BPF calls as we use tail calls) and complexity, hence this is
 		 * done inside a tail call here.
 		 */
-		cilium_dbg3(ctx, 0, 25, ret < 0 ? -ret : ret, 25);
 		ctx_skip_nodeport_set(ctx);
 		ep_tail_call(ctx, CILIUM_CALL_IPV4_FROM_NETDEV);
 		ret = DROP_MISSED_TAIL_CALL;
@@ -2056,7 +2178,6 @@ int tail_nodeport_nat_egress_ipv4(struct __ctx_buff *ctx)
 		verdict = ret;
 	}
 #endif
-	cilium_dbg3(ctx, 0, 34, 34, 34);
 	ret = snat_v4_nat(ctx, &target, &ext_err);
 	if (IS_ERR(ret) && ret != NAT_PUNT_TO_STACK)
 		goto drop_err;
@@ -2139,7 +2260,7 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		if (crab_parse_ret)
 			break;
 	}
-	cilium_dbg3(ctx, 0, crab_parse_ret, crab_parse_ret, 0);
+	cilium_dbg3(ctx, 0, crab_parse_ret, crab_parse_ret, 0); // very important line!!!!!!!!!! error if not here
 	if (crab_parse_ret == 1) { // Found option, LB egress, nothing special to do
 		redir_opt = (struct redir_opt_complete *)parser.cur_pos;
 		if ((void*)redir_opt + sizeof(struct redir_opt_complete) > data_end)
@@ -2152,12 +2273,13 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		__be32 new_daddr = redir_opt->ip2;
 		__be16 old_port;
 		__be16 new_port = redir_opt->port2;
+		// __be32 client_ip = redir_opt->ip1;
+		// __be16 client_port = redir_opt->port1;
 		int diff;
 		struct csum_offset csum_off = {};
 		__u8 index;
 		__u8 old_index;
 		l4_off = l3_off + ipv4_hdrlen(ip4);
-		
 		// Modify dest ip
 		ret = ctx_store_bytes(ctx, l3_off + offsetof(struct iphdr, daddr),
 			      &new_daddr, 4, 0);
@@ -2185,7 +2307,27 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		csum_l4_offset_and_flags(IPPROTO_TCP, &csum_off);
 		if (csum_l4_replace(ctx, l4_off, &csum_off, old_port, new_port, sizeof(new_port)) < 0)
 			return DROP_CSUM_L4;
-		
+
+		// Modify source ip
+		// if (!revalidate_data(ctx, &data, &data_end, &ip4))
+		// 	return DROP_INVALID;
+		// ret = ctx_store_bytes(ctx, l3_off + offsetof(struct iphdr, saddr),
+		// 	      &client_ip, 4, 0);
+		// if (ret < 0) return DROP_WRITE_ERROR;
+		// if (!revalidate_data(ctx, &data, &data_end, &ip4))
+		// 		return DROP_INVALID;
+		// ip4->check = 0;
+		// diff = csum_diff(NULL, 0, ip4, sizeof(struct iphdr), 0);
+		// if (ipv4_csum_update_by_diff(ctx, l3_off, diff) < 0)
+		// 	return DROP_CSUM_L3;
+		// // Modify source port
+		// if (!revalidate_data(ctx, &data, &data_end, &ip4))
+		// 	return DROP_INVALID;
+		// tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
+		// if ((void*)tcph + sizeof(struct tcphdr) > data_end)
+		// 	return DROP_INVALID;
+		// ret = ctx_store_bytes(ctx, l3_off + sizeof(struct iphdr) + offsetof(struct tcphdr, source),
+		// 	      &client_port, 2, 0);
 		// increment index
 		if (!revalidate_data(ctx, &data, &data_end, &ip4))
 			return DROP_INVALID;
@@ -2216,58 +2358,60 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		__be16 client_port = redir_opt->port1;
 		__be32 service_ip = redir_opt->ip2;
 		__be16 service_port = redir_opt->port2;
-		__be32 old_ip;
-		__be16 old_port;
+		// __be32 old_ip;
+		// __be16 old_port;
 		struct crab4_pair crab_key = {};
-		struct crab4_pair crab_value = {};
-		struct crab4_pair *temp = NULL;
-		__be32 sum_diff;
-		struct csum_offset csum_off = {};
+		struct crab4_pair_long crab_value = {};
+		struct crab4_pair_long *temp = NULL;
+		// __be32 sum_diff;
+		// struct csum_offset csum_off = {};
 		l4_off = l3_off + ipv4_hdrlen(ip4);
 
-		cilium_dbg3(ctx, 0, 11, 11, 11);
 		// store service_ip & service_port in crab ebpf map
-		crab_key.addr = client_ip;
-		crab_key.port = client_port;
-		crab_value.addr = service_ip;
-		crab_value.port = service_port;
-		ret = map_update_elem(&LB4_CRAB_MAP, &crab_key, &crab_value, BPF_ANY);
+		crab_key.addr = ip4->saddr;
+		crab_key.port = tcph->source;
+		crab_value.addr1 = client_ip;
+		crab_value.port1 = client_port;
+		crab_value.addr2 = service_ip;
+		crab_value.port2 = service_port;
+		ret = map_update_elem(&LB4_CRAB_MAP_LONG, &crab_key, &crab_value, BPF_ANY);
 		if (ret < 0) return DROP_WRITE_ERROR;
 		// read the value from map
-		temp = map_lookup_elem(&LB4_CRAB_MAP, &crab_key);
+		temp = map_lookup_elem(&LB4_CRAB_MAP_LONG, &crab_key);
 		if (temp == NULL) return DROP_INVALID_TC_BUFFER;
-		cilium_dbg3(ctx,DBG_CT_LOOKUP4_1, temp->addr , temp->addr, ((bpf_ntohs(temp->port) << 16) | bpf_ntohs(temp->port)));
+		cilium_dbg3(ctx,DBG_CT_LOOKUP4_1, temp->addr1 , temp->addr2, ((bpf_ntohs(temp->port1) << 16) | bpf_ntohs(temp->port2)));
 
-		cilium_dbg3(ctx, 0, 12, 12, 12);
 		// write client ip & port to packet
-		old_ip = ip4->saddr;
-		old_port = tcph->source;
-		sum_diff = csum_diff(&old_ip, 4, &client_ip, 4, 0);
-		if (ipv4_csum_update_by_diff(ctx, l3_off, sum_diff) < 0)
-			return DROP_CSUM_L3;
-		ret = ctx_store_bytes(ctx, l3_off + offsetof(struct iphdr, saddr),
-			      &client_ip, 4, 0);
-		if (ret < 0)
-			return DROP_WRITE_ERROR;
+		// old_ip = ip4->saddr;
+		// old_port = tcph->source;
+		// sum_diff = csum_diff(&old_ip, 4, &client_ip, 4, 0);
+		// if (ipv4_csum_update_by_diff(ctx, l3_off, sum_diff) < 0)
+		// 	return DROP_CSUM_L3;
+		// ret = ctx_store_bytes(ctx, l3_off + offsetof(struct iphdr, saddr),
+		// 	      &client_ip, 4, 0);
+		// if (ret < 0)
+		// 	return DROP_WRITE_ERROR;
 		
-		if (!revalidate_data(ctx, &data, &data_end, &ip4))
-			return DROP_INVALID;
-		tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
-		if ((void*)tcph + sizeof(struct tcphdr) > data_end)
-			return DROP_INVALID;
+		// if (!revalidate_data(ctx, &data, &data_end, &ip4))
+		// 	return DROP_INVALID;
+		// tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
+		// if ((void*)tcph + sizeof(struct tcphdr) > data_end)
+		// 	return DROP_INVALID;
 
-		if (has_l4_header)
-			csum_l4_offset_and_flags(IPPROTO_TCP, &csum_off);
-		if (csum_l4_replace(ctx, l4_off, &csum_off, old_port, client_port, sizeof(client_port)) < 0)
-			return DROP_CSUM_L4;
-		if (ctx_store_bytes(ctx, l4_off + offsetof(struct tcphdr, source), &client_port, sizeof(client_port), 0) < 0)
-			return DROP_WRITE_ERROR;
+		// if (has_l4_header)
+		// 	csum_l4_offset_and_flags(IPPROTO_TCP, &csum_off);
+		// if (csum_l4_replace(ctx, l4_off, &csum_off, old_port, client_port, sizeof(client_port)) < 0)
+		// 	return DROP_CSUM_L4;
+		// if (ctx_store_bytes(ctx, l4_off + offsetof(struct tcphdr, source), &client_port, sizeof(client_port), 0) < 0)
+		// 	return DROP_WRITE_ERROR;
 	}
 	else if (redir_opt->index == 2) { // client receives the SYN ACK
-		__be32 backend_ip = redir_opt->ip1;
-		__be16 backend_port = redir_opt->port1;
+		__be32 client_ip = redir_opt->ip1;
+		__be16 client_port = redir_opt->port1;
 		__be32 service_ip = redir_opt->ip2;
 		__be16 service_port = redir_opt->port2;
+		__be32 backend_ip = ip4->saddr;
+		__be16 backend_port = tcph->source;
 		struct ct_state state = {};
 		struct lb4_key crab_key = {};
 		struct ipv4_ct_tuple crab_tuple = {};
@@ -2279,14 +2423,19 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		__u16 slot = 1;
 		__u32 backend_id = 0;
 
+		cilium_dbg3(ctx, 0,50,50,50);
+		cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, redir_opt->ip1, redir_opt->ip2,
+			(bpf_ntohs(redir_opt->port2) << 16) | bpf_ntohs(redir_opt->port1));
+		cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, redir_opt->ip1, redir_opt->ip3,
+			(bpf_ntohs(redir_opt->port2) << 16) | bpf_ntohs(redir_opt->port1));
 		// Service conntrack
 		tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
 		if ((void*)tcph + sizeof(struct tcphdr) > data_end)
 			return DROP_INVALID;
 		crab_tuple.nexthdr = IPPROTO_TCP;
 		crab_tuple.daddr = service_ip;
-		crab_tuple.saddr = ip4->daddr;
-		crab_tuple.dport = tcph->dest; // Extra care, Cilium handle tuple port differently
+		crab_tuple.saddr = client_ip;
+		crab_tuple.dport = client_port; // Extra care, Cilium handle tuple port differently
 		crab_tuple.sport = service_port;
 		crab_tuple.flags = TUPLE_F_SERVICE;
 		lb4_fill_key(&crab_key, &crab_tuple);
@@ -2343,7 +2492,6 @@ skip_crab:
 	lb4_fill_key(&key, &tuple);
 	cilium_dbg3(ctx,DBG_CT_LOOKUP4_1, tuple.saddr , key.address, ((bpf_ntohs(tuple.sport) << 16) | bpf_ntohs(tuple.dport)));
 	svc = lb4_lookup_service(&key, false, false);
-	cilium_dbg3(ctx,0, svc==NULL, svc==NULL, 0);
 	cilium_capture_out(ctx);
 	if (svc) {
 		const bool skip_l3_xlate = DSR_ENCAP_MODE == DSR_ENCAP_IPIP;
@@ -2431,7 +2579,7 @@ skip_service_lookup:
 #endif /* ENABLE_DSR */
 
 		ctx_store_meta(ctx, CB_SRC_LABEL, src_sec_identity);
-		cilium_dbg3(ctx, 0, CB_SRC_LABEL,CB_SRC_LABEL,CB_SRC_LABEL);
+		
 		/* For NAT64 we might see an IPv4 reply from the backend to
 		 * the LB entering this path. Thus, transform back to IPv6.
 		 */
@@ -2451,7 +2599,6 @@ skip_service_lookup:
 			ep_tail_call(ctx, CILIUM_CALL_IPV6_NODEPORT_NAT_INGRESS);
 #endif
 		} else {
-			cilium_dbg3(ctx,0,21,21,21);
 			ep_tail_call(ctx, CILIUM_CALL_IPV4_NODEPORT_NAT_INGRESS);
 		}
 		return DROP_MISSED_TAIL_CALL;
@@ -2459,17 +2606,14 @@ skip_service_lookup:
 #if defined(ENABLE_CRAB)
 crab_handle:
 #endif /*ENABLE_CRAB*/
-	cilium_dbg3(ctx,0,22,22,22);
 	backend_local = __lookup_ip4_endpoint(tuple.daddr);
 	if (!backend_local && lb4_svc_is_hostport(svc))
 		return DROP_INVALID;
-	cilium_dbg3(ctx,0,31,31,31);
 	/* Reply from DSR packet is never seen on this node again
 	 * hence no need to track in here.
 	 */
 	if (backend_local || !nodeport_uses_dsr4(&tuple)) {
 		struct ct_state ct_state = {};
-		cilium_dbg3(ctx,0,32,32,32);
 
 		ret = ct_lb_lookup4(get_ct_map4(&tuple), &tuple, ctx, l4_off,
 				    has_l4_header, CT_EGRESS, &ct_state, &monitor);
@@ -2526,7 +2670,6 @@ redo:
 #endif /* DSR_ENCAP_MODE */
 		ep_tail_call(ctx, CILIUM_CALL_IPV4_NODEPORT_DSR);
 	} else {
-		cilium_dbg3(ctx,0,33,33,33);
 		ep_tail_call(ctx, CILIUM_CALL_IPV4_NODEPORT_NAT_EGRESS);
 	}
 	return DROP_MISSED_TAIL_CALL;

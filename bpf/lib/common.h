@@ -902,6 +902,13 @@ struct crab4_pair {
 	__be16      port;
 } __packed;
 
+struct crab4_pair_long {
+	__be32      addr1;
+	__be16      port1;
+	__be32      addr2;
+	__be16      port2;
+} __packed;
+
 struct ct_entry {
 	__u64 rx_packets;
 	/* Previously, the rx_bytes field was not used for entries with

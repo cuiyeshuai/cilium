@@ -39,6 +39,8 @@ const (
 	RevNat4MapName = "cilium_lb4_reverse_nat"
 	// Crab4MapName is the name of the IPv4 LB crab BPF map.
 	Crab4MapName = "cilium_lb4_crab"
+	// Crab4MapNameLong is the name of the IPv4 LB crab BPF map.
+	Crab4MapNameLong = "cilium_lb4_crab_long"
 )
 
 var (
@@ -60,6 +62,8 @@ var (
 	RevNat4Map *bpf.Map
 	// Crab4Map is the IPv4 LB crab BPF map.
 	Crab4Map *bpf.Map
+	// Crab4MapLong is the IPv4 LB crab BPF map.
+	Crab4MapLong *bpf.Map
 )
 
 // initSVC constructs the IPv4 & IPv6 LB BPF maps used for Services. The maps
@@ -137,6 +141,17 @@ func initSVC(params InitParams) {
 			bpf.ConvertKeyValue,
 		).WithCache().WithPressureMetric().
 			WithEvents(option.Config.GetEventBufferConfig(Crab4MapName))
+		Crab4MapLong = bpf.NewMap(Crab4MapNameLong,
+			bpf.MapTypeHash,
+			&Crab4Key{},
+			int(unsafe.Sizeof(Crab4Key{})),
+			&Crab4ValueLong{},
+			int(unsafe.Sizeof(Crab4ValueLong{})),
+			ServiceBackEndMapMaxEntries,
+			0, 0,
+			bpf.ConvertKeyValue,
+		).WithCache().WithPressureMetric().
+			WithEvents(option.Config.GetEventBufferConfig(Crab4MapNameLong))
 	}
 
 	if params.IPv6 {
@@ -212,6 +227,7 @@ var _ Backend = (*Backend4V2)(nil)
 var _ Backend = (*Backend4V3)(nil)
 var _ CrabKey = (*Crab4Key)(nil)
 var _ CrabValue = (*Crab4Value)(nil)
+var _ CrabValueLong = (*Crab4ValueLong)(nil)
 
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=github.com/cilium/cilium/pkg/bpf.MapKey
@@ -279,6 +295,43 @@ func (k *Crab4Value) ToHost() CrabValue {
 func (v *Crab4Value) String() string {
 	vHost := v.ToHost().(*Crab4Value)
 	return net.JoinHostPort(vHost.Address.String(), fmt.Sprintf("%d", vHost.Port))
+}
+
+// +k8s:deepcopy-gen=true
+// +k8s:deepcopy-gen:interfaces=github.com/cilium/cilium/pkg/bpf.MapValue
+type Crab4ValueLong struct {
+	Address1 types.IPv4 `align:"address"`
+	Port1    uint16     `align:"port"`
+	Address2 types.IPv4 `align:"address"`
+	Port2    uint16     `align:"port"`
+}
+
+func (v *Crab4ValueLong) GetValuePtr() unsafe.Pointer { return unsafe.Pointer(v) }
+
+// ToNetwork converts Crab4ValueLong to network byte order.
+func (v *Crab4ValueLong) ToNetwork() CrabValueLong {
+	n := *v
+	n.Port1 = byteorder.HostToNetwork16(n.Port1)
+	n.Port2 = byteorder.HostToNetwork16(n.Port2)
+	return &n
+}
+
+func (v *Crab4ValueLong) GetServiceIP() net.IP   { return v.Address1.IP() }
+func (v *Crab4ValueLong) GetServicePort() uint16 { return v.Port1 }
+func (v *Crab4ValueLong) GetsecondIP() net.IP   { return v.Address2.IP() }
+func (v *Crab4ValueLong) GetsecondPort() uint16 { return v.Port2 }
+
+// ToHost converts Crab4ValueLong to host byte order.
+func (k *Crab4ValueLong) ToHost() CrabValueLong {
+	h := *k
+	h.Port1 = byteorder.NetworkToHost16(h.Port1)
+	h.Port2 = byteorder.NetworkToHost16(h.Port2)
+	return &h
+}
+
+func (v *Crab4ValueLong) String() string {
+	vHost := v.ToHost().(*Crab4ValueLong)
+	return net.JoinHostPort(vHost.Address1.String(), fmt.Sprintf("%d", vHost.Port1))
 }
 
 // +k8s:deepcopy-gen=true

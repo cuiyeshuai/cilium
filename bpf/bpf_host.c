@@ -878,7 +878,6 @@ tail_handle_ipv4(struct __ctx_buff *ctx, __u32 ipcache_srcid, const bool from_ho
 	ctx_store_meta(ctx, CB_SRC_LABEL, 0);
 
 	ret = handle_ipv4(ctx, proxy_identity, ipcache_srcid, from_host, &ext_err);
-	cilium_dbg3(ctx, 0, 34, 34, 34);
 
 	/* TC_ACT_REDIRECT is not an error, but it means we should stop here. */
 	if (ret == CTX_ACT_OK) {
@@ -1253,7 +1252,6 @@ int cil_from_netdev(struct __ctx_buff *ctx)
 	};
 #endif
 #endif
-	cilium_dbg3(ctx, 0,0,0,0);
 	send_trace_notify(ctx, TRACE_FROM_NETWORK, 0, 0, 0,
 				  ctx->ingress_ifindex,
 				  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);

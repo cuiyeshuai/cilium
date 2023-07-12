@@ -141,19 +141,24 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			option_value.size = sizeof(struct redir_opt_complete);
 			option_value.ip1 = tuple.saddr;
 			option_value.ip2 = tuple.daddr;
+			option_value.ip3 = (__u32)0;
 			option_value.port1 = tcph->source;
 			option_value.port2 = tcph->dest;
 			option_value.index = (__u8)0;
 			option_value.padding = (__u8)0;
-			option_value.temp = (__u16)0;
-			option_value.padding1 = (__u16)0;
 			redir_opt = &option_value;
 			send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
 			  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
+
+			cilium_dbg3(ctx, 0,50,50,50);
+			cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, option_value.ip1, option_value.ip2,
+		    	(bpf_ntohs(option_value.port2) << 16) | bpf_ntohs(option_value.port1));
+			cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, option_value.ip1, option_value.ip3,
+		    	(bpf_ntohs(option_value.port2) << 16) | bpf_ntohs(option_value.port1));
+
 			if (!revalidate_data(ctx, &data, &data_end, &ip4)) 
 				return DROP_INVALID;
 			if (crab_add_tcp_option(ctx, ip4->tot_len, ip4, tcph, redir_opt, REDIR_OPT_COMPLETE) < 0) {
-				cilium_dbg3(ctx,0,10,10,10);
 				return DROP_INVALID;
 			}
 			if (!revalidate_data_pull(ctx, &data, &data_end, &ip4)) 
@@ -165,9 +170,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			svc = get_crab_service(svc);     // SVC of crab LB
 			if (!svc || unlikely(svc->count == 0))
 				return DROP_NO_SERVICE;
-			cilium_dbg3(ctx, 0, 25, 25, 25);
 			ret = crab_rewrite_egress_client(ctx, svc, &tuple, ETH_HLEN, l4_off, has_l4_header); // Rewrite dst IP to crab LB SVC IP
-			cilium_dbg3(ctx, 0, 26, 26, 26);
 			if(IS_ERR(ret)) {
 				return ret;
 			}
@@ -186,7 +189,6 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			lb4_fill_key(&key, &tuple);
 			cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr,
 					bpf_ntohs(tuple.dport));
-			cilium_dbg3(ctx, 0, 26, 26, 26);
 			// read tcp options again
 			// {
 			// 	int i = 0;
@@ -269,35 +271,37 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 				service_ip = redir_opt->ip2;
 				cilium_dbg3(ctx, DBG_CRAB1, client_ip, service_ip, 0);
 			} else { // Server egress, retrieve the option from ebpf map and add it to the packet
-				__be32 client_ip = ip4->daddr;
-				__be16 client_port = tcph->dest;
+				__be32 client_masq_ip = ip4->daddr;
+				__be16 client_masq_port = tcph->dest;
 				struct crab4_pair crab_key = {};
-				struct crab4_pair *temp = NULL;
-				crab_key.addr = client_ip;
-				crab_key.port = client_port;
+				struct crab4_pair_long *temp = NULL;
+				crab_key.addr = client_masq_ip;
+				crab_key.port = client_masq_port;
 				
-				temp = map_lookup_elem(&LB4_CRAB_MAP, &crab_key);
+				temp = map_lookup_elem(&LB4_CRAB_MAP_LONG, &crab_key);
 				if (temp == NULL) goto skip_service_lookup; // normal egress
-				map_delete_elem(&LB4_CRAB_MAP, &crab_key);
-				cilium_dbg3(ctx, 0, 25, 25, 0);
+				map_delete_elem(&LB4_CRAB_MAP_LONG, &crab_key);
 				{
 					struct redir_opt_complete option_value;
 					option_value.type = REDIR_OPT_TYPE_COMPLETE;
 					option_value.size = sizeof(struct redir_opt_complete);
-					option_value.ip1 = ip4->saddr;
-					option_value.ip2 = temp->addr;
-					option_value.port1 = tcph->source;
-					option_value.port2 = temp->port;
+					option_value.ip1 = temp->addr1;
+					option_value.ip2 = temp->addr2;
+					option_value.ip3 = ip4->saddr;
+					option_value.port1 = temp->port1;
+					option_value.port2 = temp->port2;
 					option_value.index = (__u8)2;
 					option_value.padding = (__u8)0;
-					option_value.temp = (__u16)0;
-					option_value.padding1 = (__u16)0;
 					redir_opt = &option_value;
+					cilium_dbg3(ctx, 0,50,50,50);
+					cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, option_value.ip1, option_value.ip2,
+						(bpf_ntohs(option_value.port2) << 16) | bpf_ntohs(option_value.port1));
+					cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, option_value.ip1, option_value.ip3,
+						(bpf_ntohs(option_value.port2) << 16) | bpf_ntohs(option_value.port1));
 					if (!revalidate_data(ctx, &data, &data_end, &ip4)) 
 						return DROP_INVALID;
 					tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
 					if (crab_add_tcp_option(ctx, ip4->tot_len, ip4, tcph, redir_opt, REDIR_OPT_COMPLETE) < 0) {
-						cilium_dbg3(ctx,0,10,10,10);
 						return DROP_INVALID;
 					}
 				}
