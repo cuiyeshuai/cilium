@@ -287,7 +287,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 					option_value.size = sizeof(struct redir_opt_complete);
 					option_value.ip1 = temp->addr1;
 					option_value.ip2 = temp->addr2;
-					option_value.ip3 = ip4->saddr;
+					option_value.ip3 = ip4->daddr;
 					option_value.port1 = temp->port1;
 					option_value.port2 = temp->port2;
 					option_value.index = (__u8)2;

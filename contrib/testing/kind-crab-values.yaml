@@ -20,6 +20,7 @@ ipv4:
   enabled: true
 bpf:
   monitorAggregation: none
+  masquerade: true
 livenessProbe:
   failureThreshold: 9999
 readinessProbe:

@@ -18,7 +18,7 @@
 
 #define TCP_OPT_EOL 0
 #define TCP_OPT_NOP 1
-#define MAX_TCP_OPT_LENGTH 15
+#define MAX_TCP_OPT_LENGTH 5
 
 #define MAX_TCP_HDR_LEN 60
 #define MAX_TCP_LENGTH 1480
