@@ -306,6 +306,7 @@ static __always_inline int snat_v4_new_mapping(struct __ctx_buff *ctx,
 	cilium_dbg3(ctx, 0, rtuple.flags, rtuple.nexthdr, 0);
 	cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, ostate->to_saddr, rstate.to_daddr,
 			(bpf_ntohs(ostate->to_sport) << 16) | bpf_ntohs(rstate.to_dport));
+	cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, target->addr, target->src_from_world, target->from_local_endpoint);
 	if (retries > SNAT_SIGNAL_THRES)
 		send_signal_nat_fill_up(ctx, SIGNAL_PROTO_V4);
 	return !ret ? 0 : DROP_NAT_NO_MAPPING;

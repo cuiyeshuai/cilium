@@ -2465,6 +2465,8 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		__be16 client_port = redir_opt->port1;
 		__be32 service_ip = redir_opt->ip2;
 		__be16 service_port = redir_opt->port2;
+		__be32 client_masq_ip = redir_opt->ip3;
+		__be16 client_masq_port = redir_opt->port1;
 		__be32 backend_ip = ip4->saddr;
 		__be16 backend_port = tcph->source;
 		struct ct_state state = {};
@@ -2474,9 +2476,18 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		struct lb4_service *be;
 		struct lb4_backend *backend;
 		struct remote_endpoint_info *info;
+		struct ipv4_nat_entry ostate = {};
+		struct ipv4_nat_target target = {
+			.min_port = NODEPORT_PORT_MIN_NAT,
+			.max_port = NODEPORT_PORT_MAX_NAT,
+			.src_from_world = false,
+			.from_local_endpoint = true,
+			.addr = IPV4_DIRECT_ROUTING,
+		};
 		__u16 loop_num;
 		__u16 slot = 1;
 		__u32 backend_id = 0;
+		
 
 		cilium_dbg3(ctx, 0,50,50,50);
 		cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, client_ip, service_ip,
@@ -2527,6 +2538,19 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		if (info && info->sec_identity) 
 			state.src_sec_id = info->sec_identity;
 		ret = ct_create4(&CT_MAP_TCP4, NULL, &crab_tuple, ctx, CT_EGRESS, &state, false, false, NULL);
+
+		// Nat state update
+		crab_tuple.saddr = client_ip;
+		crab_tuple.sport = client_port;
+		crab_tuple.daddr = backend_ip;
+		crab_tuple.dport = backend_port;
+		crab_tuple.flags = NAT_DIR_EGRESS;
+
+		ostate.to_daddr = client_masq_ip;
+		ostate.to_dport = client_masq_port;
+
+		target.addr = client_masq_ip;
+		snat_v4_new_mapping(ctx, &crab_tuple, &ostate, &target);
 		goto skip_service_lookup;
 	}
 
