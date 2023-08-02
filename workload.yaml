@@ -60,6 +60,7 @@ spec:
                   values:
                   - ubuntu-pod
                   - webserver-1
+                  - sleeping-pod
             topologyKey: "kubernetes.io/hostname"
 
 ---
@@ -87,10 +88,11 @@ spec:
     app: webserver-2
   ports:
     - protocol: TCP
+      nodePort: 31111
       port: 80
       targetPort: 80
   clusterIP: 10.96.0.102
-  type: ClusterIP
+  type: NodePort
 
 # apiVersion: v1
 # kind: Pod

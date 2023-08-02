@@ -98,6 +98,9 @@ control_planes() {
   for i in $(seq 1 "${controlplanes}"); do
     echo "- role: control-plane"
     node_config "0" "$i" "${controlplanes}"
+    echo "  - containerPort: 31111"
+    echo "    hostPort: 80"
+    echo "    protocol: TCP"
   done
 }
 

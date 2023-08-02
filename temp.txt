@@ -279,3 +279,6 @@ skip_crab:
 
 
 
+cilium_dbg_lb(ctx, DBG_LB4_LOOKUP_BACKEND_SLOT, key->backend_slot, key->dport);
+return map_lookup_elem(&LB4_SERVICES_MAP_V2, key);
+for (slot = 1; slot <= 20; slot++) {

@@ -1293,6 +1293,8 @@ struct lb4_service *lb4_lookup_backend_slot(struct __ctx_buff *ctx __maybe_unuse
 
 	key->backend_slot = slot;
 	cilium_dbg_lb(ctx, DBG_LB4_LOOKUP_BACKEND_SLOT, key->backend_slot, key->dport);
+	// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, key->address, key->address,
+	// 	    (bpf_ntohs(key->dport) << 16) | bpf_ntohs(key->dport));
 	svc = __lb4_lookup_backend_slot(key);
 	if (svc)
 		return svc;
@@ -1524,7 +1526,7 @@ not_critical_services(struct ipv4_ct_tuple *tuple) {
 	// TODO: retrieve value from somewhere, e.g. ebpf map.
 	// Avoid interfering with critical services, e.g. kube-dns
 	// return tuple->daddr == bpf_htonl(0x0A600064) || tuple->daddr == bpf_htonl(0x0A600065) || tuple->daddr == bpf_htonl(0x0A600066);
-	if(tuple->daddr == bpf_htonl(0x0A600065)) {
+	if(tuple->daddr == bpf_htonl(0x0A600065) || tuple->sport == bpf_htons(31111)) {
 		return true;
 	}
 	return false;
@@ -1614,6 +1616,7 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 		state->backend_id = backend_id;
 		state->rev_nat_index = svc->rev_nat_index;
 
+		cilium_dbg3(ctx, 0, 78,78,78);
 		ret = ct_create4(map, NULL, tuple, ctx, CT_SERVICE, state, false, false, ext_err);
 		/* Fail closed, if the conntrack entry create fails drop
 		 * service lookup.
