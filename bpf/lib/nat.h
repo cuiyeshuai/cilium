@@ -268,6 +268,8 @@ static __always_inline int snat_v4_new_mapping(struct __ctx_buff *ctx,
 	port = __snat_try_keep_port(target->min_port,
 				    target->max_port,
 				    bpf_ntohs(otuple->sport));
+	cilium_dbg3(ctx, 0, 114, 114, 114);
+	cilium_dbg3(ctx, 0, port, port, 0);
 
 	rtuple.dport = ostate->to_sport = bpf_htons(port);
 	rtuple.daddr = target->addr;

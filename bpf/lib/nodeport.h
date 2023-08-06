@@ -2099,13 +2099,16 @@ int tail_nodeport_nat_ingress_ipv4(struct __ctx_buff *ctx)
 	int ret;
 
 	/* ext_err is NULL because errors don't survive the tailcall anyway. */
+	cilium_dbg3(ctx, 0, 33, 33, 33);
 	ret = snat_v4_rev_nat(ctx, &target, NULL);
+	cilium_dbg3(ctx, 0, ret, ret, ret);
 	if (IS_ERR(ret)) {
 		/* In case of no mapping, recircle back to main path. SNAT is very
 		 * expensive in terms of instructions (since we don't have BPF to
 		 * BPF calls as we use tail calls) and complexity, hence this is
 		 * done inside a tail call here.
 		 */
+		cilium_dbg3(ctx, 0, 103, 103, 103);
 		ctx_skip_nodeport_set(ctx);
 		ep_tail_call(ctx, CILIUM_CALL_IPV4_FROM_NETDEV);
 		ret = DROP_MISSED_TAIL_CALL;
@@ -2126,6 +2129,7 @@ int tail_nodeport_nat_ingress_ipv4(struct __ctx_buff *ctx)
 	 * Also let rev_nodeport_lb4() redirect EgressGW reply traffic into
 	 * tunnel (see there for details).
 	 */
+	cilium_dbg3(ctx, 0, 104, 104, 104);
 	ep_tail_call(ctx, CILIUM_CALL_IPV4_NODEPORT_REVNAT);
 #else
 	/* There's no reason to continue in the RevDNAT path, just recircle back. */
@@ -2406,7 +2410,7 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 			ep_tail_call(ctx, CILIUM_CALL_IPV4_NODEPORT_NAT_EGRESS);
 		}
 	} 
-	else if (redir_opt->index == 1 || redir_opt->index == 5) { // This is the backend pod, save service ip & port to map
+	else if (redir_opt->index == 1 || redir_opt->index == 5) { // This is the backend node ingress, save service ip & port to map
 		__be32 client_ip = redir_opt->ip1;
 		__be16 client_port = redir_opt->port1;
 		__be32 service_ip = redir_opt->ip2;
@@ -2542,6 +2546,11 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		info = lookup_ip4_remote_endpoint(ip4->saddr, cluster_id);
 		if (info && info->sec_identity) 
 			state.src_sec_id = info->sec_identity;
+		if (service_ip == IPV4_DIRECT_ROUTING) {
+			state.src_sec_id = WORLD_ID;
+			state.node_port = 1;
+			state.ifindex = (__u16)NATIVE_DEV_IFINDEX;
+		}
 		ret = ct_create4(&CT_MAP_TCP4, NULL, &crab_tuple, ctx, CT_EGRESS, &state, false, false, NULL);
 
 		// Nat state update
@@ -2556,6 +2565,10 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 
 		target.addr = client_masq_ip;
 		snat_v4_new_mapping(ctx, &crab_tuple, &ostate, &target);
+		// Check if the service is nodeport service
+		if (service_ip == IPV4_DIRECT_ROUTING) {
+			goto skip_crab;
+		}
 		goto skip_service_lookup;
 	}
 
@@ -2800,6 +2813,7 @@ skip_service_lookup:
 			ep_tail_call(ctx, CILIUM_CALL_IPV6_NODEPORT_NAT_INGRESS);
 #endif
 		} else {
+			cilium_dbg3(ctx, 0, 34, 34, 34);
 			ep_tail_call(ctx, CILIUM_CALL_IPV4_NODEPORT_NAT_INGRESS);
 		}
 		return DROP_MISSED_TAIL_CALL;
@@ -2969,15 +2983,20 @@ static __always_inline int rev_nodeport_lb4(struct __ctx_buff *ctx, __s8 *ext_er
 	has_l4_header = ipv4_has_l4_header(ip4);
 
 	ret = lb4_extract_tuple(ctx, ip4, ETH_HLEN, &l4_off, &tuple);
+	cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, tuple.saddr, tuple.daddr,
+		    (bpf_ntohs(tuple.sport) << 16) | bpf_ntohs(tuple.dport));
 	if (ret < 0) {
+		cilium_dbg3(ctx, 0, 77, 77, 77);
 		/* If it's not a SVC protocol, we don't need to check for RevDNAT: */
 		if (ret == DROP_NO_SERVICE || ret == DROP_UNKNOWN_L4)
 			goto out;
 		return ret;
 	}
 
-	if (!ct_has_nodeport_egress_entry4(get_ct_map4(&tuple), &tuple, false))
+	if (!ct_has_nodeport_egress_entry4(get_ct_map4(&tuple), &tuple, false)) {
+		cilium_dbg3(ctx, 0, 78, 78, 78);
 		goto out;
+	}
 
 	ret = ct_lb_lookup4(get_ct_map4(&tuple), &tuple, ctx, l4_off,
 			    has_l4_header, CT_INGRESS, &ct_state, &monitor);
@@ -3007,6 +3026,7 @@ static __always_inline int rev_nodeport_lb4(struct __ctx_buff *ctx, __s8 *ext_er
 				       ctx_get_ifindex(ctx), &ifindex);
 	}
 out:
+	cilium_dbg3(ctx, 0, 177, 177, 177);
 	if (bpf_skip_recirculation(ctx))
 		return DROP_NAT_NO_MAPPING;
 
