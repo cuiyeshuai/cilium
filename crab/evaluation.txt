@@ -1,0 +1,9 @@
+Connection-Request-Response (CRR)
+Request-Response (RR)
+8 byte message Size
+tail latency 99th
+throughput, SYN syn_packets
+8 kb NGINX file
+Lancet load generator
+export LOCAL_AGENT_IMAGE=$$(DOCKER_REGISTRY)/$$(DOCKER_DEV_ACCOUNT)/cilium-dev:$$(LOCAL_IMAGE_TAG)
+export DOCKER_REGISTRY=localhost:5000 LOCAL_IMAGE_TAG=local
