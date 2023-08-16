@@ -5,7 +5,7 @@
 set -euo pipefail
 
 default_controlplanes=1
-default_workers=4
+default_workers=3
 default_cluster_name=""
 default_image=""
 default_kubeproxy_mode="iptables"
@@ -101,6 +101,11 @@ control_planes() {
     echo "  - containerPort: 31111"
     echo "    hostPort: 80"
     echo "    protocol: TCP"
+    echo "  - containerPort: 31112"
+    echo "    hostPort: 81"
+    echo "    protocol: TCP"
+    echo "  - containerPort: 31113"
+    echo "    hostPort: 82"
   done
 }
 
