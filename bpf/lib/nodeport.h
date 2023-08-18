@@ -1369,11 +1369,11 @@ static __always_inline int nodeport_snat_fwd_ipv4(struct __ctx_buff *ctx,
 	};
 	int ret = CTX_ACT_OK;
 	bool snat_needed;
-	cilium_dbg3(ctx, 0, 188, 188, 188);
-	cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, target.addr, target.addr,0);
+	// cilium_dbg3(ctx, 0, 188, 188, 188);
+	// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, target.addr, target.addr,0);
 	snat_needed = snat_v4_prepare_state(ctx, &target);
-	cilium_dbg3(ctx, 0, 189, 189, 189);
-	cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, target.addr, target.addr,0);
+	// cilium_dbg3(ctx, 0, 189, 189, 189);
+	// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, target.addr, target.addr,0);
 	if (snat_needed)
 		ret = snat_v4_nat(ctx, &target, ext_err);
 	if (ret == NAT_PUNT_TO_STACK)
@@ -1415,11 +1415,11 @@ static __always_inline int nodeport_snat_fwd_ipv4(struct __ctx_buff *ctx,
 		if (crab_parse_ret == 1) { // Found option,
 			redir_opt = (struct redir_opt_complete *)parser.cur_pos;
 			if ((void*)redir_opt + sizeof(struct redir_opt_complete) > data_end) {
-				cilium_dbg3(ctx, 0, 198, 198, 198);
+				// cilium_dbg3(ctx, 0, 198, 198, 198);
 				goto skip_crab;
 			}
 		} else {
-			cilium_dbg3(ctx, 0, 199, 199, 199);
+			// cilium_dbg3(ctx, 0, 199, 199, 199);
 			goto skip_crab;
 		}
 		// if (redir_opt->index == 0) {
@@ -1464,11 +1464,11 @@ static __always_inline int nodeport_snat_fwd_ipv4(struct __ctx_buff *ctx,
 			ret = ctx_store_bytes(ctx, ETH_HLEN + ipv4_hdrlen(ip4) + sizeof(struct tcphdr) + offsetof(struct redir_opt_complete, ip3), 
 				&masquerade_ip, 4, 0);
 			if (ret < 0) return DROP_WRITE_ERROR;
-			send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
-			  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
-			cilium_dbg3(ctx, 0,50,50,50);
-			cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, masquerade_ip, masquerade_ip,
-		    	(bpf_ntohs(0) << 16) | bpf_ntohs(0));
+			// send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
+			//   TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
+			// cilium_dbg3(ctx, 0,50,50,50);
+			// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, masquerade_ip, masquerade_ip,
+		    // 	(bpf_ntohs(0) << 16) | bpf_ntohs(0));
 			
 			// set src ip to client pod ip
 			// if (!revalidate_data(ctx, &data, &data_end, &ip4))
@@ -2099,16 +2099,16 @@ int tail_nodeport_nat_ingress_ipv4(struct __ctx_buff *ctx)
 	int ret;
 
 	/* ext_err is NULL because errors don't survive the tailcall anyway. */
-	cilium_dbg3(ctx, 0, 33, 33, 33);
+	// cilium_dbg3(ctx, 0, 33, 33, 33);
 	ret = snat_v4_rev_nat(ctx, &target, NULL);
-	cilium_dbg3(ctx, 0, ret, ret, ret);
+	// cilium_dbg3(ctx, 0, ret, ret, ret);
 	if (IS_ERR(ret)) {
 		/* In case of no mapping, recircle back to main path. SNAT is very
 		 * expensive in terms of instructions (since we don't have BPF to
 		 * BPF calls as we use tail calls) and complexity, hence this is
 		 * done inside a tail call here.
 		 */
-		cilium_dbg3(ctx, 0, 103, 103, 103);
+		// cilium_dbg3(ctx, 0, 103, 103, 103);
 		ctx_skip_nodeport_set(ctx);
 		ep_tail_call(ctx, CILIUM_CALL_IPV4_FROM_NETDEV);
 		ret = DROP_MISSED_TAIL_CALL;
@@ -2129,7 +2129,7 @@ int tail_nodeport_nat_ingress_ipv4(struct __ctx_buff *ctx)
 	 * Also let rev_nodeport_lb4() redirect EgressGW reply traffic into
 	 * tunnel (see there for details).
 	 */
-	cilium_dbg3(ctx, 0, 104, 104, 104);
+	// cilium_dbg3(ctx, 0, 104, 104, 104);
 	ep_tail_call(ctx, CILIUM_CALL_IPV4_NODEPORT_REVNAT);
 #else
 	/* There's no reason to continue in the RevDNAT path, just recircle back. */
@@ -2237,7 +2237,7 @@ int tail_nodeport_nat_egress_ipv4(struct __ctx_buff *ctx)
 
 skip_crab_fib:
 #endif /*ENABLE_CRAB*/
-	cilium_dbg3(ctx,0,123,123,123);
+	// cilium_dbg3(ctx,0,123,123,123);
 	ret = snat_v4_nat(ctx, &target, &ext_err);
 	if (IS_ERR(ret) && ret != NAT_PUNT_TO_STACK)
 		goto drop_err;
@@ -2294,6 +2294,7 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 	int crab_parse_ret;
 	struct tcphdr *tcph;
 	struct redir_opt_complete *redir_opt;
+	bool after_lb = false;
 #endif /*ENABLE_CRAB*/
 
 	cilium_capture_in(ctx);
@@ -2409,13 +2410,14 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		csum_l4_offset_and_flags(IPPROTO_TCP, &csum_off);
 		if (csum_l4_replace(ctx, l4_off, &csum_off, 0, diff, 0) < 0)
 			return DROP_CSUM_L4;
-		send_trace_notify(ctx, TRACE_FROM_NETWORK, 0, 0, 0,
-				  ctx->ingress_ifindex,
-				  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
-		if (index_store == 4) {
-			cilium_dbg3(ctx, 0, 250, 250, 250);
-			ep_tail_call(ctx, CILIUM_CALL_IPV4_NODEPORT_NAT_EGRESS);
-		}
+		// send_trace_notify(ctx, TRACE_FROM_NETWORK, 0, 0, 0,
+		// 		  ctx->ingress_ifindex,
+		// 		  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
+		after_lb = true;
+		// if (index_store == 4) {
+		// 	cilium_dbg3(ctx, 0, 250, 250, 250);
+		// 	ep_tail_call(ctx, CILIUM_CALL_IPV4_NODEPORT_NAT_EGRESS);
+		// }
 	} 
 	else if (redir_opt->index == 1 || redir_opt->index == 5) { // This is the backend node ingress, save service ip & port to map
 		__be32 client_ip = redir_opt->ip1;
@@ -2450,7 +2452,7 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		// read the value from map
 		temp = map_lookup_elem(&LB4_CRAB_MAP_LONG, &crab_key);
 		if (temp == NULL) return DROP_INVALID_TC_BUFFER;
-		cilium_dbg3(ctx,DBG_CT_LOOKUP4_1, temp->addr1 , temp->addr2, ((bpf_ntohs(temp->port1) << 16) | bpf_ntohs(temp->port2)));
+		// cilium_dbg3(ctx,DBG_CT_LOOKUP4_1, temp->addr1 , temp->addr2, ((bpf_ntohs(temp->port1) << 16) | bpf_ntohs(temp->port2)));
 
 		// write client ip & port to packet
 		// old_ip = ip4->saddr;
@@ -2505,11 +2507,11 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		__u32 backend_id = 0;
 		
 
-		cilium_dbg3(ctx, 0,50,50,50);
-		cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, client_ip, service_ip,
-			(bpf_ntohs(service_port) << 16) | bpf_ntohs(client_port));
-		cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, client_ip, redir_opt->ip3,
-			(bpf_ntohs(service_port) << 16) | bpf_ntohs(client_port));
+		// cilium_dbg3(ctx, 0,50,50,50);
+		// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, client_ip, service_ip,
+		// 	(bpf_ntohs(service_port) << 16) | bpf_ntohs(client_port));
+		// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, client_ip, redir_opt->ip3,
+		// 	(bpf_ntohs(service_port) << 16) | bpf_ntohs(client_port));
 		// Service conntrack
 		tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
 		if ((void*)tcph + sizeof(struct tcphdr) > data_end)
@@ -2521,8 +2523,8 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 		crab_tuple.sport = service_port;
 		crab_tuple.flags = TUPLE_F_SERVICE;
 		lb4_fill_key(&crab_key, &crab_tuple);
-		cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, crab_key.address, crab_key.address,
-				(bpf_ntohs(crab_key.dport) << 16) | bpf_ntohs(crab_key.dport));
+		// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, crab_key.address, crab_key.address,
+		// 		(bpf_ntohs(crab_key.dport) << 16) | bpf_ntohs(crab_key.dport));
 		backend_svc = lb4_lookup_service(&crab_key, is_defined(ENABLE_NODEPORT), false);
 		if (backend_svc == NULL) return DROP_INVALID;
 		loop_num = backend_svc->count;
@@ -2533,8 +2535,8 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 				backend = lb4_lookup_backend(ctx, backend_id);
 				if (backend == NULL) return DROP_NO_SERVICE;
 				if ((backend->address == backend_ip && backend->port == backend_port) || slot > loop_num) break;
-				cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, backend->address, backend_ip,
-					(bpf_ntohs(backend_port) << 16) | bpf_ntohs(backend->port));
+				// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, backend->address, backend_ip,
+				// 	(bpf_ntohs(backend_port) << 16) | bpf_ntohs(backend->port));
 			}
 		}
 		if (backend_id == 0) return DROP_INVALID; // No match
@@ -2598,9 +2600,10 @@ skip_crab:
 		return ret;
 	}
 	lb4_fill_key(&key, &tuple);
-	cilium_dbg3(ctx, 0, 77, 77, 77);
-	cilium_dbg3(ctx,DBG_CT_LOOKUP4_1, tuple.saddr , key.address, ((bpf_ntohs(tuple.sport) << 16) | bpf_ntohs(tuple.dport)));
+	// cilium_dbg3(ctx, 0, 77, 77, 77);
+	// cilium_dbg3(ctx,DBG_CT_LOOKUP4_1, tuple.saddr , key.address, ((bpf_ntohs(tuple.sport) << 16) | bpf_ntohs(tuple.dport)));
 	svc = lb4_lookup_service(&key, false, false);
+	// cilium_dbg3(ctx, 0, 88, 88, 88);
 	cilium_capture_out(ctx);
 	if (svc) {
 		const bool skip_l3_xlate = DSR_ENCAP_MODE == DSR_ENCAP_IPIP;
@@ -2627,21 +2630,26 @@ skip_crab:
 			if (!ret)
 				return NAT_46X64_RECIRC;
 		} else {
-#if defined(ENABLE_CRAB) //nodeport ingress
-			// union tcp_flags tcp_flags = { .value = 0 };
-			// bool is_tcp_crab;
-			// bool is_syn_crab = false;
-			// bool is_ack_crab = false;
-			// __be32 nodeport_ip;
-			// __be16 nodeport_port;
-			// // __be32 backend_ip;
-			// // __be16 backend_port;
 
-			// if (!revalidate_data(ctx, &data, &data_end, &ip4))
-			//   return DROP_INVALID;
-			// tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
-			// if ((void*)tcph + sizeof(struct tcphdr) > data_end)
-			// 	return DROP_INVALID;
+
+
+
+
+#if defined(ENABLE_CRAB) // n-s nodeport ingress
+			union tcp_flags tcp_flags = { .value = 0 };
+			bool is_tcp_crab;
+			bool is_syn_crab = false;
+			bool is_ack_crab = false;
+			__be32 nodeport_ip;
+			__be16 nodeport_port;
+			// __be32 backend_ip;
+			// __be16 backend_port;
+
+			if (!revalidate_data(ctx, &data, &data_end, &ip4))
+			  return DROP_INVALID;
+			tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
+			if ((void*)tcph + sizeof(struct tcphdr) > data_end)
+				return DROP_INVALID;
 			
 			// // resolve service backend and put it in option, hard to mimic nodeport behavior as we don't have the node ip
 			// // {
@@ -2656,80 +2664,92 @@ skip_crab:
 			// // 	cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, backend_ip, backend_ip,
 			// // 		(bpf_ntohs(backend_port) << 16) | bpf_ntohs(backend_port));
 			// // }
-			// nodeport_ip = ip4->daddr;
-			// nodeport_port = tcph->dest;
+			nodeport_ip = ip4->daddr;
+			nodeport_port = tcph->dest;
+
+			// check dest IP is current node IP
+			if (nodeport_ip != IPV4_DIRECT_ROUTING || after_lb) {
+				goto skip_ns_option;
+			}
+
 			// send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
 			// 		TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
 			// cilium_dbg3(ctx, 0, 200, 200, 0);
-			// is_tcp_crab = tuple.nexthdr == IPPROTO_TCP;
-			// if (has_l4_header && is_tcp_crab) {
-			// 	if (l4_load_tcp_flags(ctx, l4_off, &tcp_flags) < 0)
-			// 		return DROP_CT_INVALID_HDR;
-			// 	is_syn_crab = tcp_flags.value & TCP_FLAG_SYN;
-			// 	is_ack_crab = tcp_flags.value & TCP_FLAG_ACK;
-			// }
-			// if (is_syn_crab && not_critical_services(&tuple) && !is_ack_crab) {
-			// 	struct redir_opt_complete option_value;
-			// 	struct redir_opt_complete* redir_opt_new;
+			is_tcp_crab = tuple.nexthdr == IPPROTO_TCP;
+			if (has_l4_header && is_tcp_crab) {
+				if (l4_load_tcp_flags(ctx, l4_off, &tcp_flags) < 0)
+					return DROP_CT_INVALID_HDR;
+				is_syn_crab = tcp_flags.value & TCP_FLAG_SYN;
+				is_ack_crab = tcp_flags.value & TCP_FLAG_ACK;
+			}
+			if (is_syn_crab && not_critical_services(&tuple) && !is_ack_crab) {
+				struct redir_opt_complete option_value;
+				struct redir_opt_complete* redir_opt_new;
 
-			// 	tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
-			// 	if ((void*)tcph + sizeof(struct tcphdr) > data_end)
-			// 		return DROP_INVALID;
-			// 	option_value.type = REDIR_OPT_TYPE_COMPLETE;
-			// 	option_value.size = sizeof(struct redir_opt_complete);
-			// 	option_value.ip1 = tuple.saddr;
-			// 	option_value.ip2 = nodeport_ip;
-			// 	option_value.ip3 = nodeport_ip;
-			// 	option_value.port1 = tcph->source;
-			// 	option_value.port2 = nodeport_port;
-			// 	option_value.index = (__u8)4;
-			// 	option_value.padding = (__u8)0;
+				tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
+				if ((void*)tcph + sizeof(struct tcphdr) > data_end)
+					return DROP_INVALID;
+				option_value.type = REDIR_OPT_TYPE_COMPLETE;
+				option_value.size = sizeof(struct redir_opt_complete);
+				option_value.ip1 = tuple.saddr;
+				option_value.ip2 = nodeport_ip;
+				option_value.ip3 = nodeport_ip;
+				option_value.port1 = tcph->source;
+				option_value.port2 = nodeport_port;
+				option_value.index = (__u8)4;
+				option_value.padding = (__u8)0;
 
-			// 	redir_opt_new = &option_value;
-			// 	send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
-			// 		TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
+				redir_opt_new = &option_value;
+				// send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
+				// 	TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
 
-			// 	cilium_dbg3(ctx, 0,50,50,50);
-			// 	cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, option_value.ip1, option_value.ip2,
-			// 		(bpf_ntohs(option_value.port2) << 16) | bpf_ntohs(option_value.port1));
-			// 	cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, option_value.ip1, option_value.ip3,
-			// 		(bpf_ntohs(option_value.port1) << 16) | bpf_ntohs(option_value.port1));
+				// cilium_dbg3(ctx, 0,50,50,50);
+				// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, option_value.ip1, option_value.ip2,
+				// 	(bpf_ntohs(option_value.port2) << 16) | bpf_ntohs(option_value.port1));
+				// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, option_value.ip1, option_value.ip3,
+				// 	(bpf_ntohs(option_value.port1) << 16) | bpf_ntohs(option_value.port1));
 				
-			// 	if (!revalidate_data(ctx, &data, &data_end, &ip4)) 
-			// 		return DROP_INVALID;
-			// 	if (crab_add_tcp_option(ctx, ip4->tot_len, ip4, tcph, redir_opt_new, REDIR_OPT_COMPLETE) < 0) {
-			// 		return DROP_INVALID;
-			// 	}
-			// 	if (!revalidate_data_pull(ctx, &data, &data_end, &ip4)) 
-			// 		return DROP_INVALID;
-			// 	send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
-			//   		TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
-			// 	// Redirect the packet to the LB service
-			// 	svc = get_crab_service(svc);     // SVC of crab LB
-			// 	if (!svc || unlikely(svc->count == 0))
-			// 		return DROP_NO_SERVICE;
-			// 	ret = crab_rewrite_egress_client(ctx, svc, &tuple, ETH_HLEN, l4_off, has_l4_header); // Rewrite dst IP to crab LB SVC IP
-			// 	if(IS_ERR(ret)) {
-			// 		return ret;
-			// 	}
-			// 	if (!revalidate_data(ctx, &data, &data_end, &ip4)) 
-			// 		return DROP_INVALID;
-			// 	send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
-			// 	TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
-			// 	ret = lb4_extract_tuple(ctx, ip4, ETH_HLEN, &l4_off, &tuple);
-			// 	if (IS_ERR(ret)) { 
-			// 		if (ret == DROP_NO_SERVICE)   // Not LB SVC IP but LB IP
-			// 			goto skip_service_lookup;
-			// 		else
-			// 			return ret;
-			// 	}
+				if (!revalidate_data(ctx, &data, &data_end, &ip4)) 
+					return DROP_INVALID;
+				if (crab_add_tcp_option(ctx, ip4->tot_len, ip4, tcph, redir_opt_new, REDIR_OPT_COMPLETE) < 0) {
+					return DROP_INVALID;
+				}
+				if (!revalidate_data_pull(ctx, &data, &data_end, &ip4)) 
+					return DROP_INVALID;
+				// send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
+			  	// 	TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
+				// Redirect the packet to the LB service
+				svc = get_crab_service(svc);     // SVC of crab LB
+				if (!svc || unlikely(svc->count == 0))
+					return DROP_NO_SERVICE;
+				ret = crab_rewrite_egress_client(ctx, svc, &tuple, ETH_HLEN, l4_off, has_l4_header); // Rewrite dst IP to crab LB SVC IP
+				if(IS_ERR(ret)) {
+					return ret;
+				}
+				if (!revalidate_data(ctx, &data, &data_end, &ip4)) 
+					return DROP_INVALID;
+				// send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
+				// TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
+				ret = lb4_extract_tuple(ctx, ip4, ETH_HLEN, &l4_off, &tuple);
+				if (IS_ERR(ret)) { 
+					if (ret == DROP_NO_SERVICE)   // Not LB SVC IP but LB IP
+						goto skip_service_lookup;
+					else
+						return ret;
+				}
 
-			// 	lb4_fill_key(&key, &tuple);
-			// 	cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr,
-			// 			bpf_ntohs(tuple.dport));
-			// }
-			
+				lb4_fill_key(&key, &tuple);
+				// cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr,
+				// 		bpf_ntohs(tuple.dport));
+			}
+skip_ns_option:
 #endif /*ENABLE_CRAB*/
+
+
+
+
+
+
 			ret = lb4_local(get_ct_map4(&tuple), ctx, l3_off, l4_off,
 					&key, &tuple, svc, &ct_state_new,
 					has_l4_header, skip_l3_xlate, &cluster_id,
@@ -2811,7 +2831,7 @@ skip_service_lookup:
 			ep_tail_call(ctx, CILIUM_CALL_IPV6_NODEPORT_NAT_INGRESS);
 #endif
 		} else {
-			cilium_dbg3(ctx, 0, 34, 34, 34);
+			// cilium_dbg3(ctx, 0, 34, 34, 34);
 			ep_tail_call(ctx, CILIUM_CALL_IPV4_NODEPORT_NAT_INGRESS);
 		}
 		return DROP_MISSED_TAIL_CALL;
@@ -2825,11 +2845,11 @@ crab_handle:
 	/* Reply from DSR packet is never seen on this node again
 	 * hence no need to track in here.
 	 */
-	cilium_dbg3(ctx, 0, 122, backend_local == 1, 0);
+	// cilium_dbg3(ctx, 0, 122, backend_local == 1, 0);
 	if (backend_local || !nodeport_uses_dsr4(&tuple)) {
 		struct ct_state ct_state = {};
 
-		cilium_dbg3(ctx, 0, 124, 124, 0);
+		// cilium_dbg3(ctx, 0, 124, 124, 0);
 		ret = ct_lb_lookup4(get_ct_map4(&tuple), &tuple, ctx, l4_off,
 				    has_l4_header, CT_EGRESS, &ct_state, &monitor);
 		switch (ret) {
@@ -2981,10 +3001,10 @@ static __always_inline int rev_nodeport_lb4(struct __ctx_buff *ctx, __s8 *ext_er
 	has_l4_header = ipv4_has_l4_header(ip4);
 
 	ret = lb4_extract_tuple(ctx, ip4, ETH_HLEN, &l4_off, &tuple);
-	cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, tuple.saddr, tuple.daddr,
-		    (bpf_ntohs(tuple.sport) << 16) | bpf_ntohs(tuple.dport));
+	// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, tuple.saddr, tuple.daddr,
+	// 	    (bpf_ntohs(tuple.sport) << 16) | bpf_ntohs(tuple.dport));
 	if (ret < 0) {
-		cilium_dbg3(ctx, 0, 77, 77, 77);
+		// cilium_dbg3(ctx, 0, 77, 77, 77);
 		/* If it's not a SVC protocol, we don't need to check for RevDNAT: */
 		if (ret == DROP_NO_SERVICE || ret == DROP_UNKNOWN_L4)
 			goto out;
@@ -2992,7 +3012,7 @@ static __always_inline int rev_nodeport_lb4(struct __ctx_buff *ctx, __s8 *ext_er
 	}
 
 	if (!ct_has_nodeport_egress_entry4(get_ct_map4(&tuple), &tuple, false)) {
-		cilium_dbg3(ctx, 0, 78, 78, 78);
+		// cilium_dbg3(ctx, 0, 78, 78, 78);
 		goto out;
 	}
 
@@ -3024,7 +3044,7 @@ static __always_inline int rev_nodeport_lb4(struct __ctx_buff *ctx, __s8 *ext_er
 				       ctx_get_ifindex(ctx), &ifindex);
 	}
 out:
-	cilium_dbg3(ctx, 0, 177, 177, 177);
+	// cilium_dbg3(ctx, 0, 177, 177, 177);
 	if (bpf_skip_recirculation(ctx))
 		return DROP_NAT_NO_MAPPING;
 
@@ -3098,7 +3118,6 @@ int tail_handle_snat_fwd_ipv4(struct __ctx_buff *ctx)
 		return send_drop_notify_error_ext(ctx, 0, ret, ext_err,
 						  CTX_ACT_DROP, METRIC_EGRESS);
 
-	send_trace_notify(ctx, obs_point, 0, 0, 0, 0, TRACE_REASON_UNKNOWN, 0);
 	send_trace_notify(ctx, obs_point, 0, 0, 0, 0, TRACE_REASON_UNKNOWN, 0);
 	return ret;
 }

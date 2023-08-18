@@ -1562,7 +1562,7 @@ crab_rewrite_egress_client(void *ctx, struct lb4_service *svc, struct ipv4_ct_tu
 	// backend = lb4_lookup_backend(ctx, backend_id);
 	if (!svc)
 		return DROP_NO_SERVICE;
-	cilium_dbg3(ctx, DBG_CRAB, tuple->daddr, backend.address, 0);
+	// cilium_dbg3(ctx, DBG_CRAB, tuple->daddr, backend.address, 0);
 	return lb4_xlate(ctx, &new_saddr, &(tuple->saddr), tuple->nexthdr, l3_off, l4_off, &key, &backend, has_l4_header, false);
 }
 #endif /* ENABLE_CRAB */
@@ -1616,7 +1616,7 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 		state->backend_id = backend_id;
 		state->rev_nat_index = svc->rev_nat_index;
 
-		cilium_dbg3(ctx, 0, 78,78,78);
+		// cilium_dbg3(ctx, 0, 78,78,78);
 		ret = ct_create4(map, NULL, tuple, ctx, CT_SERVICE, state, false, false, ext_err);
 		/* Fail closed, if the conntrack entry create fails drop
 		 * service lookup.

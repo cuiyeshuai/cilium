@@ -117,7 +117,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 		}
 #endif /* ENABLE_L7_LB */
 #if defined(ENABLE_CRAB)
-		cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr, 0);
+		// cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr, 0);
 		is_tcp_crab = tuple.nexthdr == IPPROTO_TCP;
 
 		if (has_l4_header && is_tcp_crab) {
@@ -147,14 +147,14 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			option_value.index = (__u8)0;
 			option_value.padding = (__u8)0;
 			redir_opt = &option_value;
-			send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
-			  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
+			// send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
+			//   TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
 
-			cilium_dbg3(ctx, 0,50,50,50);
-			cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, option_value.ip1, option_value.ip2,
-		    	(bpf_ntohs(option_value.port2) << 16) | bpf_ntohs(option_value.port1));
-			cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, option_value.ip1, option_value.ip3,
-		    	(bpf_ntohs(option_value.port2) << 16) | bpf_ntohs(option_value.port1));
+			// cilium_dbg3(ctx, 0,50,50,50);
+			// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, option_value.ip1, option_value.ip2,
+		    // 	(bpf_ntohs(option_value.port2) << 16) | bpf_ntohs(option_value.port1));
+			// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, option_value.ip1, option_value.ip3,
+		    // 	(bpf_ntohs(option_value.port2) << 16) | bpf_ntohs(option_value.port1));
 
 			if (!revalidate_data(ctx, &data, &data_end, &ip4)) 
 				return DROP_INVALID;
@@ -163,8 +163,8 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			}
 			if (!revalidate_data_pull(ctx, &data, &data_end, &ip4)) 
 				return DROP_INVALID;
-			send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
-			  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
+			// send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
+			//   TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
 
 			// Redirect the packet to the LB service
 			svc = get_crab_service(svc);     // SVC of crab LB
@@ -176,8 +176,8 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			}
 			if (!revalidate_data(ctx, &data, &data_end, &ip4)) 
 				return DROP_INVALID;
-			send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
-			  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
+			// send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
+			//   TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
 			ret = lb4_extract_tuple(ctx, ip4, ETH_HLEN, &l4_off, &tuple);
 			if (IS_ERR(ret)) { 
 				if (ret == DROP_NO_SERVICE)   // Not LB SVC IP but LB IP
@@ -187,42 +187,8 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			}
 
 			lb4_fill_key(&key, &tuple);
-			cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr,
-					bpf_ntohs(tuple.dport));
-			// read tcp options again
-			// {
-			// 	int i = 0;
-			// 	int offset;
-			// 	struct opt_parser parser = {};
-			// 	int crab_parse_ret;
-			// 	tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
-			// 	send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
-			//   		TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
-			// 	if ((void*)tcph + sizeof(struct tcphdr) > data_end)
-			// 		return DROP_INVALID;
-				
-			// 	offset = tcph->doff * 4;
-			// 	parser.cur_pos = (__u8 *)(tcph + 1);
-			//  parser.cur_offset = 0;
-			// 	parser.rest_len = (__u8)offset - sizeof(struct tcphdr);
-			// 	cilium_dbg3(ctx, 0, (__u8)offset - sizeof(struct tcphdr), (__u8)offset - sizeof(struct tcphdr), 0);
-			// 	for (i=0; i < MAX_TCP_OPT_LENGTH; i++){
-			// 		crab_parse_ret = l4_parse_tcp_options(ctx, &parser, REDIR_OPT_TYPE_COMPLETE);
-			// 		if (crab_parse_ret)
-			// 			break;
-			// 	}
-			// 	cilium_dbg3(ctx, 0, crab_parse_ret, crab_parse_ret, 0);
-			// 	if (crab_parse_ret == 1) { // Found option, LB egress, nothing special to do
-			// 		__be32 service_ip;
-			// 		__be32 client_ip;
-			// 		redir_opt = (struct redir_opt_complete *)parser.cur_pos;
-			// 		if ((void*)redir_opt + sizeof(struct redir_opt_complete) > data_end)
-			// 			return -1;
-			// 		client_ip = redir_opt->ip1;
-			// 		service_ip = redir_opt->ip2;
-			// 		cilium_dbg3(ctx, DBG_CRAB1, client_ip, service_ip, 0);
-			// 	}
-			// }
+			// cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr,
+			// 		bpf_ntohs(tuple.dport));
 		}
 		ret = lb4_local(get_ct_map4(&tuple), ctx, ETH_HLEN, l4_off,
 				&key, &tuple, svc, &ct_state_new,
@@ -232,7 +198,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 	} else {
 		// Dst IP is not a clusterIP, So it should be a egress SYN packet from LB or Backend Service Pod
 		// Check if there is a crab redir option
-		cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr, 1);
+		// cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr, 1);
 		is_tcp_crab = tuple.nexthdr == IPPROTO_TCP;
 
 		if (has_l4_header && is_tcp_crab) {
@@ -269,7 +235,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 					return -1;
 				client_ip = redir_opt->ip1;
 				service_ip = redir_opt->ip2;
-				cilium_dbg3(ctx, DBG_CRAB1, client_ip, service_ip, 0);
+				// cilium_dbg3(ctx, DBG_CRAB1, client_ip, service_ip, 0);
 			} else { // Server egress, retrieve the option from ebpf map and add it to the packet
 				__be32 client_masq_ip = ip4->daddr;
 				__be16 client_masq_port = tcph->dest;
@@ -293,11 +259,11 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 					option_value.index = (__u8)2;
 					option_value.padding = (__u8)0;
 					redir_opt = &option_value;
-					cilium_dbg3(ctx, 0,50,50,50);
-					cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, option_value.ip1, option_value.ip2,
-						(bpf_ntohs(option_value.port2) << 16) | bpf_ntohs(option_value.port1));
-					cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, option_value.ip1, option_value.ip3,
-						(bpf_ntohs(option_value.port2) << 16) | bpf_ntohs(option_value.port1));
+					// cilium_dbg3(ctx, 0,50,50,50);
+					// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, option_value.ip1, option_value.ip2,
+					// 	(bpf_ntohs(option_value.port2) << 16) | bpf_ntohs(option_value.port1));
+					// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, option_value.ip1, option_value.ip3,
+					// 	(bpf_ntohs(option_value.port2) << 16) | bpf_ntohs(option_value.port1));
 					if (!revalidate_data(ctx, &data, &data_end, &ip4)) 
 						return DROP_INVALID;
 					tcph = (struct tcphdr *)((void*)ip4 + ipv4_hdrlen(ip4));
@@ -307,21 +273,50 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 				}
 				if (!revalidate_data_pull(ctx, &data, &data_end, &ip4)) 
 					return DROP_INVALID;
-				send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
-				TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
+				// send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
+				// TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
 			}
 		}
 		goto skip_service_lookup;
+// #else 
+// 	// no actual purpose, just to add computation to check if this is where the overhead comes from.
+// 		{
+// 			struct redir_opt_complete* redir_opt;
+// 			union tcp_flags tcp_flags = { .value = 0 };
+// 			bool is_tcp_crab = false;
+// 			bool is_syn_crab = false;
+// 			bool is_ack_crab = false;
+
+// 			cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr, 0);
+// 			is_tcp_crab = tuple.nexthdr == IPPROTO_TCP;
+
+// 			if (has_l4_header && is_tcp_crab) {
+// 				if (l4_load_tcp_flags(ctx, l4_off, &tcp_flags) < 0)
+// 					return DROP_CT_INVALID_HDR;
+// 				is_syn_crab = tcp_flags.value & TCP_FLAG_SYN;
+// 				is_ack_crab = tcp_flags.value & TCP_FLAG_ACK;
+// 			}
+// 			if (is_syn_crab && not_critical_services(&tuple) && !is_ack_crab) {
+// 			} 
+// 		}
 #endif /*ENABLE_CRAB*/
-		//!!!
-		// if (!svc || unlikely(svc->count == 0))
-		// 		goto skip_service_lookup;
 		ret = lb4_local(get_ct_map4(&tuple), ctx, ETH_HLEN, l4_off,
 				&key, &tuple, svc, &ct_state_new,
 				has_l4_header, false, &cluster_id, ext_err);
 		if (IS_ERR(ret))
 			return ret;
 	}
+	// } else { //Add extra computation
+	// 	cilium_dbg3(ctx, DBG_CRAB, tuple.saddr, tuple.daddr, 1);
+	// 	is_tcp_crab = tuple.nexthdr == IPPROTO_TCP;
+
+	// 	if (has_l4_header && is_tcp_crab) {
+	// 		if (l4_load_tcp_flags(ctx, l4_off, &tcp_flags) < 0)
+	// 			return DROP_CT_INVALID_HDR;
+	// 		is_syn_crab = tcp_flags.value & TCP_FLAG_SYN;
+	// 	}
+	// 	if (is_syn_crab) {cilium_dbg3(ctx, 0, is_syn_crab,is_syn_crab,is_syn_crab); }
+	// }
 
 skip_service_lookup:
 	/* Store state to be picked up on the continuation tail call. */
