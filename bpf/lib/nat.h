@@ -268,8 +268,8 @@ static __always_inline int snat_v4_new_mapping(struct __ctx_buff *ctx,
 	port = __snat_try_keep_port(target->min_port,
 				    target->max_port,
 				    bpf_ntohs(otuple->sport));
-	cilium_dbg3(ctx, 0, 114, 114, 114);
-	cilium_dbg3(ctx, 0, port, port, 0);
+	// cilium_dbg3(ctx, 0, 114, 114, 114);
+	// cilium_dbg3(ctx, 0, port, port, 0);
 
 	rtuple.dport = ostate->to_sport = bpf_htons(port);
 	rtuple.daddr = target->addr;
@@ -327,9 +327,9 @@ static __always_inline int snat_v4_track_connection(struct __ctx_buff *ctx,
 	__u32 monitor = 0;
 	enum ct_dir where;
 	int ret;
-	cilium_dbg3(ctx, 0, 27,27,27);
+	// cilium_dbg3(ctx, 0, 27,27,27);
 	if (state && state->common.host_local) {
-		cilium_dbg3(ctx, 0, 49,49,49);
+		// cilium_dbg3(ctx, 0, 49,49,49);
 		needs_ct = true;
 #if defined(ENABLE_EGRESS_GATEWAY)
 	/* Track egress gateway connections, but only if they are related to a
@@ -341,24 +341,24 @@ static __always_inline int snat_v4_track_connection(struct __ctx_buff *ctx,
 		needs_ct = true;
 #endif
 	} else if (!state && dir == NAT_DIR_EGRESS && tuple->saddr == target->addr) {
-		cilium_dbg3(ctx, 0, 50,50,50);
+		// cilium_dbg3(ctx, 0, 50,50,50);
 		needs_ct = true;
 	}
 	if (!needs_ct) {
-		cilium_dbg3(ctx, 0, 28,28,28);
+		// cilium_dbg3(ctx, 0, 28,28,28);
 		return 0;
 	}
 	memset(&ct_state, 0, sizeof(ct_state));
 	memcpy(&tmp, tuple, sizeof(tmp));
 
 	where = dir == NAT_DIR_INGRESS ? CT_INGRESS : CT_EGRESS;	
-	cilium_dbg3(ctx, 0, 29,29,29);
+	// cilium_dbg3(ctx, 0, 29,29,29);
 	ret = ct_lookup4(get_ct_map4(&tmp), &tmp, ctx, off, where,
 			 &ct_state, &monitor);
 	if (ret < 0) {
 		return ret;
 	} else if (ret == CT_NEW) {
-		cilium_dbg3(ctx, 0, 30,30,30);
+		// cilium_dbg3(ctx, 0, 30,30,30);
 		ret = ct_create4(get_ct_map4(&tmp), NULL, &tmp, ctx,
 				 where, &ct_state, false, false, ext_err);
 		if (IS_ERR(ret))
@@ -422,17 +422,17 @@ snat_v4_rev_nat_handle_mapping(struct __ctx_buff *ctx,
 		    (bpf_ntohs(tuple->dport) << 16) | bpf_ntohs(tuple->dport));
 	cilium_dbg3(ctx, 0, ret<0 ? -ret : ret, 0, 0);
 	if (ret < 0) {
-		cilium_dbg3(ctx, 0, 41,41,41);
+		// cilium_dbg3(ctx, 0, 41,41,41);
 		return ret;
 	}
 	else if (*state) {
-		cilium_dbg3(ctx, 0, 42,42,42);
+		// cilium_dbg3(ctx, 0, 42,42,42);
 		return NAT_CONTINUE_XLATE;
 	}
 	else {
-		cilium_dbg3(ctx, 0, 43,43,43);
-		cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, 0, 0,
-		    (bpf_ntohs(target->min_port) << 16) | bpf_ntohs(target->min_port));
+		// cilium_dbg3(ctx, 0, 43,43,43);
+		// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, 0, 0,
+		//     (bpf_ntohs(target->min_port) << 16) | bpf_ntohs(target->min_port));
 		return tuple->nexthdr != IPPROTO_ICMP &&
 		       bpf_ntohs(tuple->dport) < target->min_port ?
 		       NAT_PUNT_TO_STACK : DROP_NAT_NO_MAPPING;
@@ -587,7 +587,7 @@ static __always_inline int snat_v4_rewrite_egress(struct __ctx_buff *ctx,
 
 	if (state->to_saddr == tuple->saddr &&
 	    state->to_sport == tuple->sport) {
-		cilium_dbg3(ctx, 0, 31,31,31);
+		// cilium_dbg3(ctx, 0, 31,31,31);
 		return 0;
 	}
 	sum = csum_diff(&tuple->saddr, 4, &state->to_saddr, 4, 0);
@@ -626,7 +626,7 @@ static __always_inline int snat_v4_rewrite_egress(struct __ctx_buff *ctx,
 			}}
 		}
 	}
-	cilium_dbg3(ctx, 0, 107,107,107);
+	// cilium_dbg3(ctx, 0, 107,107,107);
 	if (ctx_store_bytes(ctx, ETH_HLEN + offsetof(struct iphdr, saddr),
 			    &state->to_saddr, 4, 0) < 0)
 		return DROP_WRITE_ERROR;
@@ -651,10 +651,10 @@ static __always_inline int snat_v4_rewrite_ingress(struct __ctx_buff *ctx,
 
 	if (state->to_daddr == tuple->daddr &&
 	    state->to_dport == tuple->dport) {
-		cilium_dbg3(ctx, 0, 31,31,31);
+		// cilium_dbg3(ctx, 0, 31,31,31);
 		return 0;
 	}
-	cilium_dbg3(ctx, 0, 32,32,32);
+	// cilium_dbg3(ctx, 0, 32,32,32);
 	send_trace_notify(ctx, TRACE_FROM_LXC, SECLABEL, 0, 0, 0,
 			  TRACE_REASON_UNKNOWN, TRACE_PAYLOAD_LEN);
 	sum = csum_diff(&tuple->daddr, 4, &state->to_daddr, 4, 0);
@@ -800,8 +800,8 @@ static __always_inline bool snat_v4_prepare_state(struct __ctx_buff *ctx,
 
 	if (!revalidate_data(ctx, &data, &data_end, &ip4))
 		return false;
-	cilium_dbg3(ctx, 0, 185, 185, 185);
-	cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, target->addr, target->addr,0);
+	// cilium_dbg3(ctx, 0, 185, 185, 185);
+	// cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, target->addr, target->addr,0);
 	/* Basic minimum is to only NAT when there is a potential of
 	 * overlapping tuples, e.g. applications in hostns reusing
 	 * source IPs we SNAT in NodePort and BPF-masq.
@@ -831,7 +831,7 @@ static __always_inline bool snat_v4_prepare_state(struct __ctx_buff *ctx,
 	}
 # ifdef ENABLE_MASQUERADE
 	if (ip4->saddr == IPV4_MASQUERADE) {
-		cilium_dbg3(ctx, 0, 3, 3, 3);
+		// cilium_dbg3(ctx, 0, 3, 3, 3);
 		target->addr = IPV4_MASQUERADE;
 		return true;
 	}
@@ -946,7 +946,7 @@ skip_egress_gateway:
 		 * reply.
 		 */
 		if (!is_reply && local_ep) {
-			cilium_dbg3(ctx, 0, 4, 4, 4);
+			// cilium_dbg3(ctx, 0, 4, 4, 4);
 			target->addr = IPV4_MASQUERADE;
 			return true;
 		}
@@ -1124,7 +1124,7 @@ snat_v4_nat(struct __ctx_buff *ctx, const struct ipv4_nat_target *target, __s8 *
 		return ret;
 
 rewrite_egress:
-	cilium_dbg3(ctx, 0, 30, 30, 30);
+	// cilium_dbg3(ctx, 0, 30, 30, 30);
 	return snat_v4_rewrite_egress(ctx, &tuple, state, off, ipv4_has_l4_header(ip4));
 }
 
@@ -1262,18 +1262,18 @@ snat_v4_rev_nat(struct __ctx_buff *ctx, const struct ipv4_nat_target *target, __
 	
 	if (snat_v4_rev_nat_can_skip(target, &tuple))
 		return NAT_PUNT_TO_STACK;
-	cilium_dbg3(ctx, 0, 23, 23, 23);
+	// cilium_dbg3(ctx, 0, 23, 23, 23);
 	ret = snat_v4_rev_nat_handle_mapping(ctx, &tuple, &state, off, target, ext_err);
 	if (ret > 0) {
-		cilium_dbg3(ctx, 0, 43, 43, 43);
+		// cilium_dbg3(ctx, 0, 43, 43, 43);
 		return CTX_ACT_OK;
 	}
 	if (ret < 0) {
-		cilium_dbg3(ctx, 0, 44, 44, 44);
+		// cilium_dbg3(ctx, 0, 44, 44, 44);
 		return ret;
 	}
 rewrite_ingress:
-	cilium_dbg3(ctx, 0, 40, 40, 40);
+	// cilium_dbg3(ctx, 0, 40, 40, 40);
 	return snat_v4_rewrite_ingress(ctx, &tuple, state, off);
 }
 #else

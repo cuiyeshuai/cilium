@@ -89,6 +89,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 	bool is_tcp_crab = false;
 	bool is_syn_crab = false;
 	bool is_ack_crab = false;
+	bool is_rst_crab = false; // This is for netperf test only, should be removed if we don't care reset packets
 #endif /* ENABLE_CRAB */
 	struct lb4_key key = {};
 	__u16 proxy_port = 0;
@@ -125,6 +126,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 				return DROP_CT_INVALID_HDR;
 			is_syn_crab = tcp_flags.value & TCP_FLAG_SYN;
 			is_ack_crab = tcp_flags.value & TCP_FLAG_ACK;
+			is_rst_crab = tcp_flags.value & TCP_FLAG_RST;
 		}
 		// We only handle SYN, SYNACK packets
 		// We don't handle critical services like 'kubernetes'
@@ -205,8 +207,9 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 			if (l4_load_tcp_flags(ctx, l4_off, &tcp_flags) < 0)
 				return DROP_CT_INVALID_HDR;
 			is_syn_crab = tcp_flags.value & TCP_FLAG_SYN;
+			is_rst_crab = tcp_flags.value & TCP_FLAG_RST;
 		}
-		if (is_syn_crab) {
+		if (is_syn_crab || is_rst_crab) {
 			struct tcphdr *tcph;
 			int i = 0;
 			int offset;
@@ -226,7 +229,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 				if (crab_parse_ret)
 					break;
 			}
-
+			cilium_dbg3(ctx, 0, 70, 70, 70);
 			if (crab_parse_ret == 1) { // Found option, LB egress, nothing special to do
 				__be32 service_ip;
 				__be32 client_ip;
@@ -245,7 +248,10 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 				crab_key.port = client_masq_port;
 				
 				temp = map_lookup_elem(&LB4_CRAB_MAP_LONG, &crab_key);
+				cilium_dbg3(ctx, 0, 44, 44, 44);
+				cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, crab_key.addr, 0, ((bpf_ntohs(crab_key.port) << 16) | bpf_ntohs(0)));
 				if (temp == NULL) goto skip_service_lookup; // normal egress
+				cilium_dbg3(ctx, DBG_CT_LOOKUP4_1, temp->addr1, temp->addr2, ((bpf_ntohs(temp->port2) << 16) | bpf_ntohs(temp->port1)));
 				map_delete_elem(&LB4_CRAB_MAP_LONG, &crab_key);
 				{
 					struct redir_opt_complete option_value;

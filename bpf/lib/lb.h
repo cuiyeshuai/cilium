@@ -1526,7 +1526,7 @@ not_critical_services(struct ipv4_ct_tuple *tuple) {
 	// TODO: retrieve value from somewhere, e.g. ebpf map.
 	// Avoid interfering with critical services, e.g. kube-dns
 	// return tuple->daddr == bpf_htonl(0x0A600064) || tuple->daddr == bpf_htonl(0x0A600065) || tuple->daddr == bpf_htonl(0x0A600066);
-	if(tuple->daddr == bpf_htonl(0x0A600065) || tuple->sport == bpf_htons(31111)) {
+	if(tuple->daddr == bpf_htonl(0x0A600065) || tuple->sport == bpf_htons(31111) || tuple->sport == bpf_htons(31112) || tuple->sport == bpf_htons(31113)) {
 		return true;
 	}
 	return false;

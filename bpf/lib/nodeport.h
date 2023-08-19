@@ -2682,7 +2682,7 @@ skip_crab:
 				is_syn_crab = tcp_flags.value & TCP_FLAG_SYN;
 				is_ack_crab = tcp_flags.value & TCP_FLAG_ACK;
 			}
-			if (is_syn_crab && not_critical_services(&tuple) && !is_ack_crab) {
+			if (is_syn_crab && !is_ack_crab && not_critical_services(&tuple)) {
 				struct redir_opt_complete option_value;
 				struct redir_opt_complete* redir_opt_new;
 
