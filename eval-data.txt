@@ -130,3 +130,5 @@ for i in {1..20}; do netperf -t TCP_CRR -T TCP -H 0.0.0.0 -p 80 -l 10 -- -P ,82 
 629,788,1560
 627,755,1296
 645,785,1625
+
+for i in {1..10}; do netperf -t TCP_CRR -T TCP -H 10.96.0.101 -p 4444 -l 150 -- -P ,4445 -o P50_LATENCY,P90_LATENCY,P99_LATENCY; done

@@ -169,6 +169,19 @@ CILIUM_CALL_IPV4_NODEPORT_NAT_FWD // tail_handle_nat_fwd_ipv4
         
         snat_v4_nat_handle_mapping
             
+cil_to_netdev
+    handle_nat_fwd
+CILIUM_CALL_IPV4_NODEPORT_NAT_FWD
+    __handle_nat_fwd_ipv4
+        nodeport_rev_dnat_fwd_ipv4
+CILIUM_CALL_IPV4_NODEPORT_SNAT_FWD
+    nodeport_snat_fwd_ipv4
+        snat_v4_prepare_state
+            target->addr = IPV4_MASQUERADE;
+			return true;
+        snat_v4_nat
+            snat_v4_nat_handle_mapping
+        
 
 
 
