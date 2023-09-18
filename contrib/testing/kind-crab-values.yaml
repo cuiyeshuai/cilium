@@ -36,7 +36,7 @@ routing-mode: native
 autoDirectNodeRoutes: true
 tunnel: disabled
 crab:
-  enabled: true
+  enabled: false
 # enable-endpoint-routes: true
 
 # enableIPv4Masquerade: true
