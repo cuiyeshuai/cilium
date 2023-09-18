@@ -32,7 +32,7 @@ For a deeper dive:
 - A detailed, step-by-step breakdown can be found in this [Life of a Packet - Pod to Service](http://arthurchiao.art/blog/cilium-life-of-a-packet-pod-to-service/) guide. (Note: In section 7.2, the call should be to `handle_policy`.)
 - For insights on the functions executed when a SYN packet is sent from a pod to a service, refer to `/crab/calls.txt`.
 
-Modifications in this project are predominantly focused on the Cilium eBPF C code's datapath behavior. Searching for 'ENABLE_CRAB' in the codebase will highlight all the logic additions to the datapath. For a visual representation of the flow, refer to the figures:
+Modifications in this project are predominantly focused on the Cilium eBPF C code's datapath behavior. Searching for `ENABLE_CRAB` in the codebase will highlight all the crab logic additions to the datapath. For a visual representation of the flow, refer to the figures:
 
 ![bpf_lxc](./bpf_lxc.png)
 ![from_netdev](./from_netdev.png)
